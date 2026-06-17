@@ -1,9 +1,14 @@
 import { useSelector } from '@tanstack/svelte-store';
-import { escapeHtml, getAssetCrossOrigin, isInlinableStylesheet, resolveManifestAssetLink, } from '@tanstack/router-core';
+import { appendUniqueUserTags, escapeHtml, getAssetCrossOrigin, getScriptPreloadAttrs, resolveManifestCssLink, } from '@tanstack/router-core';
 import { useRouter } from './useRouter';
 /**
  * Build the list of head/link/meta/script tags to render for active matches.
  * Used internally by `HeadContent`.
+ *
+ * Mirrors `@tanstack/solid-router`'s `useTags` against router-core's manifest
+ * model: per-route `css` links + a single top-level `inlineStyle`, with script
+ * preloads resolved via `getScriptPreloadAttrs`. User-authored tags (meta,
+ * links, styles, scripts) are de-duplicated with `appendUniqueUserTags`.
  */
 export function useTags(assetCrossOrigin) {
     const router = useRouter();
@@ -12,7 +17,7 @@ export function useTags(assetCrossOrigin) {
         const routeMetasArray = matches
             .map((match) => match.meta)
             .filter(Boolean);
-        const resultMeta = [];
+        const meta = [];
         const metaByAttribute = {};
         let title;
         for (let i = routeMetasArray.length - 1; i >= 0; i--) {
@@ -28,7 +33,7 @@ export function useTags(assetCrossOrigin) {
                 else if ('script:ld+json' in m) {
                     try {
                         const json = JSON.stringify(m['script:ld+json']);
-                        resultMeta.push({
+                        meta.push({
                             tag: 'script',
                             attrs: { type: 'application/ld+json' },
                             children: escapeHtml(json),
@@ -45,57 +50,65 @@ export function useTags(assetCrossOrigin) {
                             continue;
                         metaByAttribute[attribute] = true;
                     }
-                    resultMeta.push({ tag: 'meta', attrs: { ...m, nonce } });
+                    meta.push({ tag: 'meta', attrs: { ...m, nonce } });
                 }
             }
         }
         if (title)
-            resultMeta.push(title);
+            meta.push(title);
         if (router.options.ssr?.nonce) {
-            resultMeta.push({
+            meta.push({
                 tag: 'meta',
                 attrs: { property: 'csp-nonce', content: router.options.ssr.nonce },
             });
         }
-        resultMeta.reverse();
+        meta.reverse();
         const links = matches
             .map((match) => match.links)
             .filter(Boolean)
             .flat(1)
             .map((link) => ({ tag: 'link', attrs: { ...link, nonce } }));
         const manifest = router.ssr?.manifest;
-        const assetTags = matches
-            .map((match) => manifest?.routes[match.routeId]?.assets ?? [])
-            .filter(Boolean)
-            .flat(1)
-            .flatMap((asset) => {
-            if (asset.tag === 'link') {
-                if (isInlinableStylesheet(manifest, asset))
-                    return [];
-                return [
-                    {
+        const manifestCssTags = [];
+        if (manifest) {
+            for (const match of matches) {
+                manifest.routes[match.routeId]?.css?.forEach((link) => {
+                    const resolvedLink = resolveManifestCssLink(link);
+                    manifestCssTags.push({
                         tag: 'link',
                         attrs: {
-                            ...asset.attrs,
+                            rel: 'stylesheet',
+                            ...resolvedLink,
                             crossOrigin: getAssetCrossOrigin(assetCrossOrigin, 'stylesheet') ??
-                                asset.attrs?.crossOrigin,
+                                resolvedLink.crossOrigin,
                             nonce,
                         },
-                    },
-                ];
+                    });
+                });
             }
-            if (asset.tag === 'style') {
-                return [
-                    {
-                        tag: 'style',
-                        attrs: { ...asset.attrs, nonce },
-                        children: asset.children,
-                        ...(asset.inlineCss ? { inlineCss: true } : {}),
-                    },
-                ];
+            if (manifest.inlineStyle) {
+                manifestCssTags.push({
+                    tag: 'style',
+                    attrs: { ...manifest.inlineStyle.attrs, nonce },
+                    children: manifest.inlineStyle.children,
+                    inlineCss: true,
+                });
             }
-            return [];
-        });
+        }
+        const preloadLinks = [];
+        for (const match of matches) {
+            router.ssr?.manifest?.routes[match.routeId]?.preloads
+                ?.filter(Boolean)
+                .forEach((preload) => {
+                preloadLinks.push({
+                    tag: 'link',
+                    attrs: {
+                        ...getScriptPreloadAttrs(router.ssr?.manifest, preload, assetCrossOrigin),
+                        nonce,
+                    },
+                });
+            });
+        }
         const styles = matches
             .map((match) => match.styles)
             .flat(1)
@@ -112,44 +125,13 @@ export function useTags(assetCrossOrigin) {
             attrs: { ...script, nonce },
             children,
         }));
-        const preloadLinks = [];
-        for (const match of matches) {
-            const route = router.looseRoutesById[match.routeId];
-            if (!route)
-                continue;
-            router.ssr?.manifest?.routes[route.id]?.preloads
-                ?.filter(Boolean)
-                .forEach((preload) => {
-                const preloadLink = resolveManifestAssetLink(preload);
-                preloadLinks.push({
-                    tag: 'link',
-                    attrs: {
-                        rel: 'modulepreload',
-                        href: preloadLink.href,
-                        crossOrigin: getAssetCrossOrigin(assetCrossOrigin, 'modulepreload') ??
-                            preloadLink.crossOrigin,
-                        nonce,
-                    },
-                });
-            });
-        }
-        return uniqBy([
-            ...resultMeta,
-            ...preloadLinks,
-            ...links,
-            ...assetTags,
-            ...styles,
-            ...headScripts,
-        ], (d) => JSON.stringify(d));
-    });
-}
-export function uniqBy(arr, fn) {
-    const seen = new Set();
-    return arr.filter((item) => {
-        const key = fn(item);
-        if (seen.has(key))
-            return false;
-        seen.add(key);
-        return true;
+        const next = [];
+        appendUniqueUserTags(next, meta);
+        next.push(...preloadLinks);
+        appendUniqueUserTags(next, links);
+        next.push(...manifestCssTags);
+        appendUniqueUserTags(next, styles);
+        appendUniqueUserTags(next, headScripts);
+        return next;
     });
 }
