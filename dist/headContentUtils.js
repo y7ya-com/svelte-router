@@ -5,7 +5,7 @@ import { useRouter } from './useRouter';
  * Build the list of head/link/meta/script tags to render for active matches.
  * Used internally by `HeadContent`.
  *
- * Mirrors `@tanstack/solid-router`'s `useTags` against router-core's manifest
+ * Collects the current route tree's head tags against router-core's manifest
  * model: per-route `css` links + a single top-level `inlineStyle`, with script
  * preloads resolved via `getScriptPreloadAttrs`. User-authored tags (meta,
  * links, styles, scripts) are de-duplicated with `appendUniqueUserTags`.
@@ -109,18 +109,18 @@ export function useTags(assetCrossOrigin) {
                 });
             });
         }
-        const styles = matches
+        const styles = (matches
             .map((match) => match.styles)
             .flat(1)
-            .filter(Boolean).map(({ children, ...style }) => ({
+            .filter(Boolean)).map(({ children, ...style }) => ({
             tag: 'style',
             attrs: { ...style, nonce },
             children,
         }));
-        const headScripts = matches
+        const headScripts = (matches
             .map((match) => match.headScripts)
             .flat(1)
-            .filter(Boolean).map(({ children, ...script }) => ({
+            .filter(Boolean)).map(({ children, ...script }) => ({
             tag: 'script',
             attrs: { ...script, nonce },
             children,

@@ -1,7 +1,7 @@
 import type { UseParamsRoute } from './useParams';
 import type { UseMatchRoute } from './useMatch.svelte';
 import type { UseSearchRoute } from './useSearch';
-import type { AnyContext, AnyRoute, AnyRouter, Constrain, ConstrainLiteral, FileBaseRouteOptions, FileRoutesByPath, LazyRouteOptions, Register, RegisteredRouter, ResolveParams, Route as RouteType, RouteById, RouteConstraints, RouteIds, RouteLoaderEntry, UpdatableRouteOptions, UseNavigateResult } from '@tanstack/router-core';
+import type { AnyContext, AnyRoute, AnyRouter, Constrain, ConstrainLiteral, FileBaseRouteOptions, FileRoutesByPath, LazyRouteOptions, Register, RegisteredRouter, ResolveParams, RouteById, RouteConstraints, RouteIds, RouteLoaderEntry, Route as RouteType, UpdatableRouteOptions, UseNavigateResult } from '@tanstack/router-core';
 import type { UseLoaderDepsRoute } from './useLoaderDeps';
 import type { UseLoaderDataRoute } from './useLoaderData';
 import type { UseRouteContextRoute } from './useRouteContext';

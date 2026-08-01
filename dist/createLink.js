@@ -1,7 +1,7 @@
 import Link from './Link.svelte';
 /**
  * Creates a custom Link variant that renders the given element/component
- * instead of `<a>`. Mirrors solid-router's `createLink`.
+ * instead of `<a>`.
  *
  * `target` can be:
  *  - a string HTML element name (e.g. `'button'`) — rendered via `<svelte:element>`
@@ -16,3 +16,10 @@ export function createLink(target) {
     };
     return wrapped;
 }
+/**
+ * Type-checks a link options object against the route tree without rendering
+ * anything — an identity function at runtime.
+ */
+export const linkOptions = (options) => {
+    return options;
+};

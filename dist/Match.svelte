@@ -20,17 +20,32 @@
 
   // matchStores is a Map (non-reactive), but each entry is a reactive atom.
   // matchId is a prop and can change — we subscribe imperatively to handle source changes.
-  let match = $state<AnyRouteMatch | undefined>(undefined)
+  //
+  // The read MUST be a `$derived`, not a `$state` written from an `$effect`:
+  // `$effect` runs *after* the render pass, so an effect-written `match` stays
+  // on the outgoing match for one full render while `matchId` already points at
+  // the incoming one. During that render the outgoing route's component is still
+  // mounted even though its match has already been dropped from `matchesId`, so
+  // its `useMatch`/`useRouteContext({ from })` selectors resolve to `undefined`
+  // and unguarded reads throw. Deriving keeps the component swap in the same
+  // pass as the `matchId` change. It also works on the server, where `$effect`
+  // never runs.
+  //
+  // `matchVersion` is only a reactivity trigger: the atom's value is invisible
+  // to Svelte, so the subscription bumps a counter that the derived reads.
+  let matchVersion = $state(0)
   $effect(() => {
     const store = router.stores.matchStores.get(matchId)
-    if (!store) {
-      match = undefined
-      return
-    }
-    match = store.get()
-    return store.subscribe((next: AnyRouteMatch) => {
-      match = next
+    if (!store) return
+    return store.subscribe(() => {
+      matchVersion++
     }).unsubscribe
+  })
+  const match = $derived.by(() => {
+    matchVersion
+    return router.stores.matchStores.get(matchId)?.get() as
+      | AnyRouteMatch
+      | undefined
   })
 
   const pendingRouteIdsSel = useSelector(router.stores.pendingRouteIds)
@@ -65,9 +80,8 @@
   const status = $derived(match?.status)
 
   // Decide whether this Match should render `notFoundComponent` or bubble the
-  // not-found error up to a parent Match's boundary. Mirrors solid Match.tsx's
-  // CatchNotFound re-throw mechanism. The `errSrc` arg is the actual error
-  // (either from the match itself or bubbled into the boundary).
+  // not-found error up to a parent Match's boundary. The `errSrc` arg is the
+  // actual error (either from the match itself or bubbled into the boundary).
   function shouldHandleNotFoundHere(
     m: any,
     r: AnyRoute | undefined,
@@ -78,7 +92,7 @@
     const routeIdTarget = nfErr?.routeId
     const hasOwnNotFound =
       !!r?.options.notFoundComponent ||
-      (r?.isRoot && !!rtr.options.defaultNotFoundComponent)
+      !!(r?.isRoot && rtr.options.defaultNotFoundComponent)
     if (routeIdTarget) {
       // Explicit routeId: only the matching route renders its notFoundComponent.
       return r?.id === routeIdTarget && hasOwnNotFound
@@ -111,7 +125,13 @@
 {:else if status === 'error'}
   {#if route?.options.errorComponent || router.options.defaultErrorComponent}
     {@const RouteErrorComponent = (errorComponent ?? ErrorComponent) as Component<any>}
-    <RouteErrorComponent error={match.error} info={{ componentStack: '' }} />
+    <!-- Direct (non-boundary) error render: no boundary reset is available
+         here, so `reset` is undefined. -->
+    <RouteErrorComponent
+      error={match.error}
+      reset={undefined as any}
+      info={{ componentStack: '' }}
+    />
   {:else}
     <ErrorBubbler error={match.error} />
   {/if}
@@ -128,7 +148,7 @@
     {:else}
       <Outlet />
     {/if}
-    {#snippet failed(error)}
+    {#snippet failed(error, reset)}
       {#if isNotFound(error)}
         {#if shouldHandleNotFoundHere(match, route, router, error)}
           {#if isSnippet(notFoundComponent)}
@@ -144,7 +164,13 @@
         {#if isSnippet(errorComponent)}
           {@render (errorComponent as Snippet<[]>)()}
         {:else}
-          <RouteErrorComponent error={error as Error} info={{ componentStack: '' }} />
+          <!-- Boundary-caught error: `reset` re-renders the boundary
+               contents, so the error component's `props.reset()` retries. -->
+          <RouteErrorComponent
+            error={error as Error}
+            reset={reset as () => void}
+            info={{ componentStack: '' }}
+          />
         {/if}
       {:else}
         <ErrorBubbler error={error} />

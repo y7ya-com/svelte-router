@@ -1,7 +1,19 @@
 <script lang="ts">
+  import { getContext } from 'svelte'
   import { useTags } from './headContentUtils'
+  import { headSlotContextKey } from './routerContext'
 
   const tagsSel = useTags()
+
+  // Render at most once per tree. The scaffolds (RouterServer/RouterClient)
+  // seed a head slot, and `RouterProvider` seeds one when they haven't (pure
+  // SPA); the first `HeadContent` claims it and renders, any later instance
+  // becomes a no-op (prevents duplicate `<meta>` tags).
+  const headSlot = getContext(headSlotContextKey) as
+    | { used: boolean }
+    | undefined
+  const suppressed =
+    !!headSlot && (headSlot.used || ((headSlot.used = true), false))
 
   // Svelte does not evaluate `{@html}` (or any interpolation) inside a literal
   // style/script element — their content is treated as raw text. Tags carrying
@@ -37,18 +49,29 @@
   }
 </script>
 
+<!-- `<svelte:head>` must be a top-level element (can't be wrapped in a block),
+     so the single-render guard lives inside it: when suppressed, it renders
+     nothing. -->
 <svelte:head>
-  {#each tagsSel.current as tag}
-    {#if tag.tag === 'title'}
-      <title>{tag.children}</title>
-    {:else if tag.tag === 'meta'}
-      <meta {...tag.attrs} />
-    {:else if tag.tag === 'link'}
-      <link {...tag.attrs} />
-    {:else if tag.tag === 'style'}
-      {@html styleTagHtml(tag)}
-    {:else if tag.tag === 'script'}
-      {@html scriptTagHtml(tag)}
-    {/if}
-  {/each}
+  {#if !suppressed}
+    <!-- The style/script branches serialize a whole element and emit it with
+    `{@html}`: `<svelte:head>` can't host `<svelte:element>`, so the tag has to
+    be built as a string. Contents come from route `head` options and the build
+    manifest — author-controlled, never user input. -->
+    {#each tagsSel.current as tag, i (i)}
+      {#if tag.tag === 'title'}
+        <title>{tag.children}</title>
+      {:else if tag.tag === 'meta'}
+        <meta {...tag.attrs} />
+      {:else if tag.tag === 'link'}
+        <link {...tag.attrs} />
+      {:else if tag.tag === 'style'}
+        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+        {@html styleTagHtml(tag)}
+      {:else if tag.tag === 'script'}
+        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+        {@html scriptTagHtml(tag)}
+      {/if}
+    {/each}
+  {/if}
 </svelte:head>

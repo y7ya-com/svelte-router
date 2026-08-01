@@ -1,10 +1,5 @@
-import type { AnyRouter, RegisteredRouter } from '@tanstack/router-core';
-import type { Snippet } from 'svelte';
-type LinkStateProps = {
-    class?: string;
-    style?: Record<string, unknown> | string;
-    [key: string]: unknown;
-};
+import type { Component, Snippet } from 'svelte';
+import type { LinkStateProps } from './useLinkProps.svelte';
 type Props = {
     to?: string;
     from?: string;
@@ -39,27 +34,6 @@ type Props = {
 type $$ComponentProps = Props & {
     _asChild?: any;
 };
-declare function $$render<TRouter extends AnyRouter = RegisteredRouter>(): {
-    props: $$ComponentProps;
-    exports: {};
-    bindings: "";
-    slots: {};
-    events: {};
-};
-declare class __sveltets_Render<TRouter extends AnyRouter = RegisteredRouter> {
-    props(): ReturnType<typeof $$render<TRouter>>['props'];
-    events(): ReturnType<typeof $$render<TRouter>>['events'];
-    slots(): ReturnType<typeof $$render<TRouter>>['slots'];
-    bindings(): "";
-    exports(): {};
-}
-interface $$IsomorphicComponent {
-    new <TRouter extends AnyRouter = RegisteredRouter>(options: import('svelte').ComponentConstructorOptions<ReturnType<__sveltets_Render<TRouter>['props']>>): import('svelte').SvelteComponent<ReturnType<__sveltets_Render<TRouter>['props']>, ReturnType<__sveltets_Render<TRouter>['events']>, ReturnType<__sveltets_Render<TRouter>['slots']>> & {
-        $$bindings?: ReturnType<__sveltets_Render<TRouter>['bindings']>;
-    } & ReturnType<__sveltets_Render<TRouter>['exports']>;
-    <TRouter extends AnyRouter = RegisteredRouter>(internal: unknown, props: ReturnType<__sveltets_Render<TRouter>['props']> & {}): ReturnType<__sveltets_Render<TRouter>['exports']>;
-    z_$$bindings?: ReturnType<__sveltets_Render<any>['bindings']>;
-}
-declare const Link: $$IsomorphicComponent;
-type Link<TRouter extends AnyRouter = RegisteredRouter> = InstanceType<typeof Link<TRouter>>;
+declare const Link: Component<$$ComponentProps, {}, "">;
+type Link = ReturnType<typeof Link>;
 export default Link;

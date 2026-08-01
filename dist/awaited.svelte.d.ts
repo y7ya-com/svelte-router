@@ -4,7 +4,7 @@ export type AwaitOptions<T> = {
 };
 /**
  * Synchronously read a deferred promise's resolved value, or throw to suspend.
- * Mirrors solid-router's useAwaited: throws the promise if still pending, throws
+ * Throws the promise if still pending, throws
  * the error if errored, returns [data, deferredPromise] when ready.
  */
 export declare function useAwaited<T>({ promise: _promise, }: AwaitOptions<T>): [T, DeferredPromise<T>];

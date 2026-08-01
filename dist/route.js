@@ -19,7 +19,7 @@ export class Route extends BaseRoute {
         this.useLoaderData = (opts) => useLoaderData({ ...opts, from: this.id });
         this.useNavigate = () => useNavigate({ from: this.fullPath });
         // Route-bound Link — equivalent to `<Link from={route.fullPath} ...>`.
-        // Matches the `route.Link` shorthand found in solid-router and react-router.
+        // The `route.Link` shorthand: a Link pre-bound to this route's path.
         this.Link = ((internals, props) => LinkComponent(internals, {
             from: this.fullPath,
             ...props,
@@ -39,7 +39,7 @@ export class RootRoute extends BaseRootRoute {
         this.useLoaderDeps = (opts) => useLoaderDeps({ ...opts, from: this.id });
         this.useLoaderData = (opts) => useLoaderData({ ...opts, from: this.id });
         this.useNavigate = () => useNavigate({ from: this.fullPath });
-        // Root-route-bound Link (rarely useful but matches solid/react parity).
+        // Root-route-bound Link.
         this.Link = ((internals, props) => LinkComponent(internals, {
             from: this.fullPath,
             ...props,
@@ -68,7 +68,7 @@ export class RouteApi extends BaseRouteApi {
         // Link bound to this route — equivalent to `<Link from={fullPath} ...>`.
         this.Link = ((internals, props) => {
             const router = useRouter();
-            const fullPath = router.routesById[this.id]?.fullPath ?? '/';
+            const fullPath = (router.routesById[this.id])?.fullPath ?? '/';
             return LinkComponent(internals, { from: fullPath, ...props });
         });
         this.notFound = (opts) => {
@@ -85,4 +85,17 @@ export function createRootRoute(options) {
 }
 export function createRouteMask(opts) {
     return opts;
+}
+/**
+ * A special route that renders when no other route matches: fixed `'/404'`
+ * path/id, no params, and the options that don't apply to a catch-all (path,
+ * id, caseSensitive, params parsing) omitted.
+ */
+export class NotFoundRoute extends Route {
+    constructor(options) {
+        super({
+            ...options,
+            id: '404',
+        });
+    }
 }

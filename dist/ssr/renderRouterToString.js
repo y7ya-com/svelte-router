@@ -1,9 +1,17 @@
 import { render } from 'svelte/server';
 import RouterServer from './RouterServer.svelte';
-export const renderRouterToString = ({ router, responseHeaders, children, }) => {
+export const renderRouterToString = ({ router, responseHeaders, }) => {
     try {
-        const RootComponent = (children ? RouterServer : RouterServer);
-        const { head, html } = render(RootComponent, { props: { router } });
+        // `children` is part of the cross-framework handler contract (react/solid
+        // pass the user's document shell here). Svelte can't take a rendered tree
+        // as a value, so the shell is `RouterServer` and this arg is accepted but
+        // unused — see the note on the SSR shell gap in the adapter README.
+        const RootComponent = RouterServer;
+        // Destructure `body`, NOT `html`: the two are identical in sync mode, but
+        // under `experimental.async` Svelte replaces `html` with a getter that
+        // throws (`html_deprecated`). Using `body` keeps this working if/when the
+        // adapter opts into async SSR.
+        const { head, body: html } = render(RootComponent, { props: { router } });
         router.serverSsr.setRenderFinished();
         let body = `<!DOCTYPE html><html><head>${head}</head><body>${html}`;
         const injectedHtml = router.serverSsr.takeBufferedHtml();

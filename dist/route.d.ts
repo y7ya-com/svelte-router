@@ -84,4 +84,12 @@ export declare function createRootRoute<TRegister = Register, TSearchValidator =
 export declare function createRouteMask<TRouteTree extends AnyRoute, TFrom extends string, TTo extends string>(opts: {
     routeTree: TRouteTree;
 } & ToMaskOptions<RouterCore<TRouteTree, 'never', false>, TFrom, TTo>): RouteMask<TRouteTree>;
+/**
+ * A special route that renders when no other route matches: fixed `'/404'`
+ * path/id, no params, and the options that don't apply to a catch-all (path,
+ * id, caseSensitive, params parsing) omitted.
+ */
+export declare class NotFoundRoute<TRegister, TParentRoute extends AnyRootRoute, TRouterContext = AnyContext, TRouteContextFn = AnyContext, TBeforeLoadFn = AnyContext, TSearchValidator = undefined, TLoaderDeps extends Record<string, any> = {}, TLoaderFn = undefined, TChildren = unknown, TSSR = unknown, THandlers = undefined> extends Route<TRegister, TParentRoute, '/404', '/404', '404', '404', TSearchValidator, {}, TRouterContext, TRouteContextFn, TBeforeLoadFn, TLoaderDeps, TLoaderFn, TChildren, unknown, TSSR, unknown, THandlers> {
+    constructor(options: Omit<RouteOptions<TRegister, TParentRoute, string, string, string, string, TSearchValidator, {}, TLoaderDeps, TLoaderFn, TRouterContext, TRouteContextFn, TBeforeLoadFn, TSSR, THandlers>, 'caseSensitive' | 'parseParams' | 'stringifyParams' | 'path' | 'id' | 'params'>);
+}
 export {};

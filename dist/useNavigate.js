@@ -1,4 +1,3 @@
-import { onMount } from 'svelte';
 import { useRouter } from './useRouter';
 export function useNavigate(_defaultOpts) {
     const router = useRouter();
@@ -8,11 +7,4 @@ export function useNavigate(_defaultOpts) {
             from: options.from ?? _defaultOpts?.from,
         });
     });
-}
-export function Navigate(props) {
-    const { navigate } = useRouter();
-    onMount(() => {
-        navigate({ ...props });
-    });
-    return null;
 }
