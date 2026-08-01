@@ -1,6 +1,6 @@
 {
   "name": "@tanstack/svelte-router",
-  "version": "0.0.3-experimental",
+  "version": "0.0.4-experimental",
   "description": "TanStack Router for Svelte 5 — experimental community port; not an official TanStack release. API mirrors @tanstack/solid-router.",
   "license": "MIT",
   "repository": {
