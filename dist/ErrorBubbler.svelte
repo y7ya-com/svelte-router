@@ -3,5 +3,8 @@
   // `<svelte:boundary>` (the parent Match's boundary) catches it and renders
   // the ancestor's errorComponent.
   let { error }: { error: unknown } = $props()
-  if (error) throw error
+  // svelte-ignore state_referenced_locally
+  if (error) {
+    throw error
+  }
 </script>

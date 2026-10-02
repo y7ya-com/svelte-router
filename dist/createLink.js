@@ -8,9 +8,8 @@ import Link from './Link.svelte';
  *  - a Svelte 5 component — rendered as `<Comp ... />` with link props spread
  */
 export function createLink(target) {
-    // Svelte 5 components are functions with a specific call shape. We wrap
-    // `Link` to pre-bind `_asChild`. The returned callable matches Svelte's
-    // `Component` signature.
+    // A Svelte 5 component is a function called as `(internals, props)`; this
+    // one renders `Link` with `_asChild` pre-bound to the target.
     const wrapped = (internals, props) => {
         return Link(internals, { ...props, _asChild: target });
     };

@@ -1,6 +1,6 @@
 import type { AnyRouter, RegisteredRouter } from '@tanstack/router-core';
 import type { Snippet } from 'svelte';
-import { type BlockerResolver, type UseBlockerOpts } from './useBlocker.svelte';
+import { type BlockerResolver, type UseBlockerOpts } from './useBlocker.svelte.js';
 declare function $$render<TRouter extends AnyRouter = RegisteredRouter, TWithResolver extends boolean = boolean>(): {
     props: UseBlockerOpts<TRouter, TWithResolver> & {
         children?: Snippet<[{

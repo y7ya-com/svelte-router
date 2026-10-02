@@ -1,26 +1,57 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte'
-  import { getLocationChangeInfo, trimPathRight } from '@tanstack/router-core'
+  import { onDestroy, onMount, tick } from 'svelte'
+  import { trimPathRight } from '@tanstack/router-core'
   import { isServer } from '@tanstack/router-core/isServer'
-  import { useSelector, batch } from '@tanstack/svelte-store'
-  import { useRouter } from './useRouter'
+  import { useRouter } from './useRouter.js'
 
   const router = useRouter()
 
-  router.startTransition = (fn: () => void | Promise<void>) => {
-    void fn()
+  // router-core hands the store commit to the framework and awaits `true` once
+  // the committed state has rendered (`false` if a newer transition superseded
+  // it). Svelte applies store changes on the next microtask flush, which is
+  // exactly what `tick()` resolves after.
+  let settleCurrent: ((rendered: boolean) => void) | undefined
+  router.startTransition = (fn) => {
+    settleCurrent?.(false)
+
+    return new Promise<boolean>((resolve, reject) => {
+      const settle = (rendered: boolean) => {
+        if (settleCurrent !== settle) {
+          return
+        }
+        settleCurrent = undefined
+        resolve(rendered)
+      }
+      const fail = (cause: unknown) => {
+        if (settleCurrent !== settle) {
+          return
+        }
+        settleCurrent = undefined
+        reject(cause)
+      }
+      settleCurrent = settle
+
+      try {
+        fn()
+      } catch (cause) {
+        fail(cause)
+        return
+      }
+      tick().then(() => settle(true), fail)
+    })
   }
 
-  let unsubHistory: (() => void) | null = null
+  let unsubHistory: (() => void) | undefined
 
   onMount(() => {
-    if (isServer ?? router.isServer) return
+    if (isServer ?? router.isServer) {
+      return
+    }
 
     unsubHistory = router.history.subscribe(router.load)
 
-    // Re-read the URL from history before any check — tests sometimes call
-    // `window.history.replaceState(...)` AFTER `createRouter(...)` but BEFORE
-    // `render(...)`, and we need to see the post-replaceState URL.
+    // Re-read the URL from history before any check — callers sometimes
+    // replaceState between `createRouter` and the first render.
     ;(router as any).updateLatestLocation?.()
 
     const nextLocation = router.buildLocation({
@@ -32,84 +63,30 @@
       _includeValidateSearch: true,
     })
 
+    // Canonicalize the URL if it does not already match.
     if (
       trimPathRight(router.latestLocation.publicHref) !==
       trimPathRight(nextLocation.publicHref)
     ) {
-      router.commitLocation({ ...nextLocation, replace: true })
+      router.commitLocation({
+        ...nextLocation,
+        replace: true,
+        ignoreBlocker: true,
+      })
+      return
     }
 
-    void router.load().catch((err: unknown) => {
-      console.error(err)
-    })
-
-    // The "already settled" case is handled by the settle block in the $effect
-    // below, which keys off `status` rather than a pending edge — see there.
+    const resolved = router.stores.resolvedLocation.get()
+    const alreadyResolved =
+      resolved?.href === router.latestLocation.href &&
+      resolved.state.__TSR_key === router.latestLocation.state.__TSR_key
+    if (!alreadyResolved && !(router as any)._tx) {
+      router.load().catch(console.error)
+    }
   })
 
   onDestroy(() => {
+    settleCurrent?.(false)
     unsubHistory?.()
-  })
-
-  const isLoadingSel = useSelector(router.stores.isLoading)
-  const hasPendingSel = useSelector(router.stores.hasPending)
-
-  let prevIsLoading = false
-  let prevIsPagePending = false
-
-  $effect(() => {
-    const isLoading = isLoadingSel.current
-    const hasPending = hasPendingSel.current
-    const currentIsAnyPending = isLoading || hasPending
-    const isPagePending = hasPending
-
-    // onLoad — fires when isLoading transitions from true → false.
-    if (prevIsLoading && !isLoading) {
-      router.emit({
-        type: 'onLoad',
-        ...getLocationChangeInfo(
-          router.stores.location.get(),
-          router.stores.resolvedLocation.get(),
-        ),
-      })
-    }
-
-    // onBeforeRouteMount — fires when isPagePending transitions true → false.
-    if (prevIsPagePending && !isPagePending) {
-      router.emit({
-        type: 'onBeforeRouteMount',
-        ...getLocationChangeInfo(
-          router.stores.location.get(),
-          router.stores.resolvedLocation.get(),
-        ),
-      })
-    }
-
-    // Settle whenever nothing is pending and the router hasn't settled yet.
-    // Keying off `status` rather than a `prevIsAnyPending → false` edge is
-    // essential: with a small tree or synchronous loaders the load finishes
-    // before this effect first runs, so `prevIsAnyPending` is never true, the
-    // edge never occurs, and `status` would stay 'pending' forever. Core sets
-    // `status` back to 'pending' for each new navigation, so this still fires
-    // exactly once per cycle.
-    if (!currentIsAnyPending && router.stores.status.get() === 'pending') {
-      const changeInfo = getLocationChangeInfo(
-        router.stores.location.get(),
-        router.stores.resolvedLocation.get(),
-      )
-      // Only if the edge above didn't already emit it, so the
-      // onBeforeRouteMount → onResolved order holds either way.
-      if (!prevIsPagePending) {
-        router.emit({ type: 'onBeforeRouteMount', ...changeInfo })
-      }
-      router.emit({ type: 'onResolved', ...changeInfo })
-
-      batch(() => {
-        router.stores.status.set('idle')
-        router.stores.resolvedLocation.set(router.stores.location.get())
-      })
-    }
-    prevIsLoading = isLoading
-    prevIsPagePending = isPagePending
   })
 </script>

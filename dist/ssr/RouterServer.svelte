@@ -3,7 +3,7 @@
   import RouterProvider from '../RouterProvider.svelte'
   import HeadContent from '../HeadContent.svelte'
   import Scripts from '../Scripts.svelte'
-  import { headSlotContextKey, routerContextKey } from '../routerContext'
+  import { headSlotContextKey, routerContextKey } from '../routerContext.js'
   import type { AnyRouter } from '@tanstack/router-core'
 
   type Props = { router: AnyRouter }
@@ -12,6 +12,7 @@
   // `HeadContent` and `Scripts` are siblings of `RouterProvider` here, so they
   // don't inherit the context it sets. Establish it at this level so their
   // `useRouter()` resolves during server render.
+  // svelte-ignore state_referenced_locally
   setContext(routerContextKey, router)
   // Claim a single head slot so a stray second `<HeadContent />` (e.g. one the
   // user also placed in their root route) renders nothing — no duplicate metas.
@@ -19,10 +20,9 @@
 </script>
 
 <!--
-  Only the app (RouterProvider) goes inside `#app`; that's the single element
-  the client hydrates. HeadContent renders into `<svelte:head>` (the document
-  head) and Scripts (dehydration + asset scripts) sit *after* `#app` — both
-  outside the hydration boundary, so the server/client trees match.
+  RouterClient renders the same tree; the client hydrates it into
+  `document.body`. HeadContent renders into `<svelte:head>` (the document head)
+  and Scripts (dehydration + asset scripts) follow the app.
 -->
 <HeadContent />
 <div id="app"><RouterProvider {router} /></div>

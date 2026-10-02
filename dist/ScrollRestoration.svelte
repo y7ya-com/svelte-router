@@ -1,4 +1,16 @@
 <script lang="ts">
-  // TODO(svelte-port): full scroll restoration. v1 minimal: no-op component.
-  // Solid-router pairs this with @tanstack/router-core's setupScrollRestoration.
+  import { setupScrollRestoration } from '@tanstack/router-core'
+  import type { ScrollRestorationOptions } from '@tanstack/router-core'
+  import { useRouter } from './useRouter.js'
+
+  /** @deprecated use createRouter's `scrollRestoration` option instead */
+  let _props: ScrollRestorationOptions = $props()
+
+  setupScrollRestoration(useRouter(), true)
+
+  if (process.env.NODE_ENV === 'development') {
+    console.warn(
+      "The ScrollRestoration component is deprecated. Use createRouter's `scrollRestoration` option instead.",
+    )
+  }
 </script>

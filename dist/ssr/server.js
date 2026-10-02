@@ -1,6 +1,6 @@
 export { default as RouterServer } from './RouterServer.svelte';
-export { defaultRenderHandler } from './defaultRenderHandler';
-export { defaultStreamHandler } from './defaultStreamHandler';
-export { renderRouterToStream } from './renderRouterToStream';
-export { renderRouterToString } from './renderRouterToString';
+export { defaultRenderHandler } from './defaultRenderHandler.js';
+export { defaultStreamHandler } from './defaultStreamHandler.js';
+export { renderRouterToStream } from './renderRouterToStream.js';
+export { renderRouterToString } from './renderRouterToString.js';
 export * from '@tanstack/router-core/ssr/server';

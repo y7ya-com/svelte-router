@@ -11,3 +11,11 @@ import type { AssetCrossOriginConfig, RouterManagedTag } from '@tanstack/router-
 export declare function useTags(assetCrossOrigin?: AssetCrossOriginConfig): {
     readonly current: Array<RouterManagedTag>;
 };
+/**
+ * Key tags by content so unchanged tags keep their DOM nodes across
+ * navigations; identical tags get an occurrence suffix to stay unique.
+ */
+export declare function keyTags(tags: Array<RouterManagedTag>): Array<{
+    key: string;
+    tag: RouterManagedTag;
+}>;

@@ -1,6 +1,6 @@
-import { useSelector } from '@tanstack/svelte-store';
-import { useRouter } from './useRouter';
+import { useRouterSelector } from './utils.js';
+import { useRouter } from './useRouter.js';
 export function useCanGoBack() {
     const router = useRouter();
-    return useSelector(router.stores.location, (loc) => loc.state.__TSR_index !== 0);
+    return useRouterSelector(router, router.stores.location, (loc) => loc.state.__TSR_index !== 0);
 }

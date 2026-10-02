@@ -1,6 +1,6 @@
-import { useSelector } from '@tanstack/svelte-store';
-import { useRouter } from './useRouter';
+import { useRouterSelector } from './utils.js';
+import { useRouter } from './useRouter.js';
 export function useLocation(opts) {
     const router = useRouter();
-    return useSelector(router.stores.location, (opts?.select ?? ((s) => s)));
+    return useRouterSelector(router, router.stores.location, (opts?.select ?? ((s) => s)));
 }

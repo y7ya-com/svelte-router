@@ -1,10 +1,10 @@
-/**
- * v1 stub for useElementScrollRestoration. Returns undefined and a no-op setter.
- * TODO(svelte-port): full implementation pairing with router-core's setupScrollRestoration.
- */
-export declare function useElementScrollRestoration(_opts: {
+import type { ParsedLocation, ScrollRestorationEntry } from '@tanstack/router-core';
+export declare function useElementScrollRestoration(options: ({
     id: string;
-    getKey?: (location: any) => string;
-}): {
-    current: number | undefined;
-};
+    getElement?: () => Window | Element | undefined | null;
+} | {
+    id?: string;
+    getElement: () => Window | Element | undefined | null;
+}) & {
+    getKey?: (location: ParsedLocation) => string;
+}): ScrollRestorationEntry | undefined;

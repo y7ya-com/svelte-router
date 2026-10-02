@@ -1,10 +1,10 @@
-import type { UseParamsRoute } from './useParams';
-import type { UseMatchRoute } from './useMatch.svelte';
-import type { UseSearchRoute } from './useSearch';
+import type { UseParamsRoute } from './useParams.js';
+import type { UseMatchRoute } from './useMatch.svelte.js';
+import type { UseSearchRoute } from './useSearch.js';
 import type { AnyContext, AnyRoute, AnyRouter, Constrain, ConstrainLiteral, FileBaseRouteOptions, FileRoutesByPath, LazyRouteOptions, Register, RegisteredRouter, ResolveParams, RouteById, RouteConstraints, RouteIds, RouteLoaderEntry, Route as RouteType, UpdatableRouteOptions, UseNavigateResult } from '@tanstack/router-core';
-import type { UseLoaderDepsRoute } from './useLoaderDeps';
-import type { UseLoaderDataRoute } from './useLoaderData';
-import type { UseRouteContextRoute } from './useRouteContext';
+import type { UseLoaderDepsRoute } from './useLoaderDeps.js';
+import type { UseLoaderDataRoute } from './useLoaderData.js';
+import type { UseRouteContextRoute } from './useRouteContext.js';
 export declare function createFileRoute<TFilePath extends keyof FileRoutesByPath, TParentRoute extends AnyRoute = FileRoutesByPath[TFilePath]['parentRoute'], TId extends RouteConstraints['TId'] = FileRoutesByPath[TFilePath]['id'], TPath extends RouteConstraints['TPath'] = FileRoutesByPath[TFilePath]['path'], TFullPath extends RouteConstraints['TFullPath'] = FileRoutesByPath[TFilePath]['fullPath']>(path?: TFilePath): FileRoute<TFilePath, TParentRoute, TId, TPath, TFullPath>['createRoute'];
 /**
  * @deprecated It's no longer recommended to use the `FileRoute` class directly.

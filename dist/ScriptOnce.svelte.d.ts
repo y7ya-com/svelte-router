@@ -1,6 +1,5 @@
-import type { Snippet } from 'svelte';
 type Props = {
-    children?: Snippet | string;
+    children: string;
     log?: boolean;
     sync?: boolean;
 };

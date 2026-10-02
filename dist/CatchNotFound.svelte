@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
-  import { useSelector } from '@tanstack/svelte-store'
-  import { useRouter } from './useRouter'
-  import { getNotFound } from './not-found'
+  import { useRouterSelector } from './utils.js'
+  import { useRouter } from './useRouter.js'
+  import { getNotFound } from './not-found.js'
   import ErrorBubbler from './ErrorBubbler.svelte'
   import type { NotFoundError } from '@tanstack/router-core'
 
@@ -15,8 +15,8 @@
   let { fallback, onCatch, children }: Props = $props()
 
   const router = useRouter()
-  const locationSel = useSelector(router.stores.location)
-  const statusSel = useSelector(router.stores.status)
+  const locationSel = useRouterSelector(router, router.stores.location)
+  const statusSel = useRouterSelector(router, router.stores.status)
 
   const resetKey = $derived(
     `not-found-${locationSel.current.pathname}-${statusSel.current}`,
@@ -24,7 +24,9 @@
 
   function onerror(error: unknown) {
     const notFoundError = getNotFound(error)
-    if (notFoundError) onCatch?.(notFoundError)
+    if (notFoundError) {
+      onCatch?.(notFoundError)
+    }
   }
 </script>
 

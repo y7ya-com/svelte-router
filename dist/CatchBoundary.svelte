@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { toError } from './utils.js'
   import type { Component, Snippet } from 'svelte'
   import type { ErrorComponentProps } from '@tanstack/router-core'
 
@@ -6,15 +7,12 @@
     getResetKey: () => unknown
     children?: Snippet
     onCatch?: (error: Error, info?: { componentStack: string }) => void
-    errorComponent?: Component<ErrorComponentProps> | Snippet<[ErrorComponentProps]>
+    errorComponent?:
+      | Component<ErrorComponentProps>
+      | Snippet<[ErrorComponentProps]>
   }
 
-  let {
-    getResetKey,
-    children,
-    onCatch,
-    errorComponent,
-  }: Props = $props()
+  let { getResetKey, children, onCatch, errorComponent }: Props = $props()
 
   // Use Svelte 5's <svelte:boundary> for error catching.
   function onerror(error: unknown, _reset: () => void) {
@@ -42,10 +40,18 @@
     {#snippet failed(error)}
       {#if errorComponent}
         {#if isSnippet(errorComponent)}
-          {@render (errorComponent as Snippet<[ErrorComponentProps]>)({ error: error as Error, info: { componentStack: '' }, reset: () => {} })}
+          {@render (errorComponent as Snippet<[ErrorComponentProps]>)({
+            error: toError(error),
+            info: { componentStack: '' },
+            reset: () => {},
+          })}
         {:else}
           {@const EC = errorComponent as Component<ErrorComponentProps>}
-          <EC error={error as Error} info={{ componentStack: '' }} reset={() => {}} />
+          <EC
+            error={toError(error)}
+            info={{ componentStack: '' }}
+            reset={() => {}}
+          />
         {/if}
       {/if}
     {/snippet}

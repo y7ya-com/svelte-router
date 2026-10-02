@@ -1,9 +1,57 @@
+import { render } from 'svelte/server';
+import { isbot } from 'isbot';
+import { createSsrStreamResponse, getSsrStatus, transformHtmlStringWithRouter, transformReadableStreamWithRouter, } from '@tanstack/router-core/ssr/server';
+import RouterServer from './RouterServer.svelte';
+import { buildDocument } from './document.js';
+const encoder = new TextEncoder();
 /**
- * v1 stub: Svelte's streaming SSR story differs from Solid/React.
- * For v1 the function exists but routes to the string renderer.
- * TODO(svelte-port): full streaming implementation via Svelte 5's render + suspense.
+ * Renders the document, then streams the router's hydration data after it —
+ * deferred loader promises included, as they resolve — through router-core's
+ * stream transform, so `<Await>` resolves on the client with no refetch.
+ *
+ * Svelte 5's `svelte/server` returns the whole document from one `render()`
+ * call, with no primitive for flushing a shell and patching resolved subtrees
+ * in later. The application output is therefore one eager record and, like
+ * Vue, uses no renderer safe points beyond the boundary, the canonical
+ * `</body></html>` close and EOF (see router-core's `ssr/STREAMING.md`).
  */
-export const renderRouterToStream = async ({ router, responseHeaders, }) => {
-    const { renderRouterToString } = await import('./renderRouterToString');
-    return renderRouterToString({ router, responseHeaders });
+export const renderRouterToStream = async ({ request, router, responseHeaders, }) => {
+    const signal = request.signal;
+    if (signal.aborted) {
+        router.serverSsr?.cleanup();
+        throw signal.reason;
+    }
+    try {
+        const RootComponent = RouterServer;
+        const { head, body } = await render(RootComponent, { props: { router } });
+        const document = buildDocument(router, head, body);
+        // Bots get the complete document, deferred data included, in one piece.
+        if (isbot(request.headers.get('User-Agent'))) {
+            const fullHtml = await transformHtmlStringWithRouter(router, document, {
+                signal,
+            });
+            return new Response(fullHtml, {
+                status: getSsrStatus(router),
+                headers: responseHeaders,
+            });
+        }
+        const html = '<!DOCTYPE html>' + document;
+        const readable = new ReadableStream({
+            start(controller) {
+                controller.enqueue(encoder.encode(html));
+                controller.close();
+            },
+        });
+        const responseStream = transformReadableStreamWithRouter(router, readable, {
+            signal,
+        });
+        return createSsrStreamResponse(router, new Response(responseStream, {
+            status: getSsrStatus(router),
+            headers: responseHeaders,
+        }));
+    }
+    catch (error) {
+        router.serverSsr?.cleanup();
+        throw error;
+    }
 };

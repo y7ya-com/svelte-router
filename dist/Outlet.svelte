@@ -1,29 +1,44 @@
 <script lang="ts">
   import { getContext } from 'svelte'
-  import { useSelector } from '@tanstack/svelte-store'
-  import { useRouter } from './useRouter'
+  import { useRouterSelector } from './utils.js'
+  import type { AnyRoute, AnyRouter } from '@tanstack/router-core'
+  import { useRouter } from './useRouter.js'
   import {
     defaultNearestMatchContext,
     nearestMatchContextKey,
     type NearestMatchContextValue,
-  } from './matchContext'
+  } from './matchContext.js'
   import Match from './Match.svelte'
+  import RouteNotFound from './RouteNotFound.svelte'
 
-  const router = useRouter()
+  const router = useRouter<AnyRouter>()
   const nearestParentMatch =
-    (getContext(nearestMatchContextKey) as NearestMatchContextValue | undefined) ??
-    defaultNearestMatchContext
+    (getContext(nearestMatchContextKey) as
+      | NearestMatchContextValue
+      | undefined) ?? defaultNearestMatchContext
 
-  const childMatchIdByRouteIdSel = useSelector(
-    router.stores.childMatchIdByRouteId,
-  )
+  const idsSel = useRouterSelector(router, router.stores.ids)
 
   const routeId = $derived(nearestParentMatch.routeId())
-  const childMatchId = $derived(
-    routeId ? childMatchIdByRouteIdSel.current[routeId] : undefined,
+  const parentMatch = $derived(nearestParentMatch.match())
+  const route = $derived(
+    routeId ? (router.routesById[routeId] as AnyRoute | undefined) : undefined,
   )
+  // The child is the next route id in the presented match list. A parent
+  // flagged `_notFound` renders the not-found view in its outlet instead.
+  const childRouteId = $derived.by(() => {
+    if (!routeId || parentMatch?._notFound) {
+      return undefined
+    }
+    const ids = idsSel.current
+    return ids[ids.indexOf(routeId) + 1]
+  })
 </script>
 
-{#if childMatchId}
-  <Match matchId={childMatchId} />
+{#if childRouteId}
+  {#key childRouteId}
+    <Match routeId={childRouteId} />
+  {/key}
+{:else if parentMatch?._notFound && route}
+  <RouteNotFound {route} error={parentMatch.error} />
 {/if}

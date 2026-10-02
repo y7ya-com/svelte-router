@@ -1,13 +1,17 @@
 import { BaseRootRoute, BaseRoute, BaseRouteApi } from '@tanstack/router-core';
 import type { AnyContext, AnyRoute, AnyRouter, ConstrainLiteral, ErrorComponentProps, NotFoundError, NotFoundRouteProps, Register, RegisteredRouter, ResolveFullPath, ResolveId, ResolveParams, RootRouteOptions, RouteConstraints, RouteIds, RouteMask, RouteOptions, RouteTypesById, RouterCore, ToMaskOptions, UseNavigateResult } from '@tanstack/router-core';
 import type { Component, Snippet } from 'svelte';
-import type { UseLoaderDataRoute } from './useLoaderData';
-import type { UseLoaderDepsRoute } from './useLoaderDeps';
-import type { UseMatchRoute } from './useMatch.svelte';
-import type { UseParamsRoute } from './useParams';
-import type { UseRouteContextRoute } from './useRouteContext';
-import type { UseSearchRoute } from './useSearch';
+import type { UseLoaderDataRoute } from './useLoaderData.js';
+import type { UseLoaderDepsRoute } from './useLoaderDeps.js';
+import type { UseMatchRoute } from './useMatch.svelte.js';
+import type { UseParamsRoute } from './useParams.js';
+import type { UseRouteContextRoute } from './useRouteContext.js';
+import type { UseSearchRoute } from './useSearch.js';
+import type { LinkComponentRoute } from './link.js';
 declare module '@tanstack/router-core' {
+    interface ErrorBoundaryTypes {
+        error: Error;
+    }
     interface UpdatableRouteOptionsExtensions {
         component?: RouteComponent;
         errorComponent?: false | null | undefined | ErrorRouteComponent;
@@ -15,9 +19,18 @@ declare module '@tanstack/router-core' {
         pendingComponent?: RouteComponent;
     }
     interface RootRouteOptionsExtensions {
+        /** Wraps the whole route tree; the Svelte analogue of React/Solid's document shell. */
         shellComponent?: Component<{
             children: Snippet;
-        }> | Snippet<[]>;
+        }>;
+        /**
+         * Attributes for the document's `<html>` element during SSR. Svelte
+         * components cannot render `<html>`/`<body>` themselves, so the shell
+         * takes them here.
+         */
+        htmlAttrs?: Record<string, string | boolean | undefined>;
+        /** Attributes for the document's `<body>` element during SSR. */
+        bodyAttrs?: Record<string, string | boolean | undefined>;
     }
     interface RouteExtensions<in out TId extends string, in out TFullPath extends string> {
         useMatch: UseMatchRoute<TId>;
@@ -27,6 +40,7 @@ declare module '@tanstack/router-core' {
         useLoaderDeps: UseLoaderDepsRoute<TId>;
         useLoaderData: UseLoaderDataRoute<TId>;
         useNavigate: () => UseNavigateResult<TFullPath>;
+        Link: LinkComponentRoute<TFullPath>;
     }
 }
 export type SvelteNode = Snippet | Component<any>;
@@ -47,7 +61,7 @@ export declare class Route<in out TRegister = unknown, in out TParentRoute exten
     useLoaderDeps: UseLoaderDepsRoute<TId>;
     useLoaderData: UseLoaderDataRoute<TId>;
     useNavigate: () => UseNavigateResult<TFullPath>;
-    Link: any;
+    Link: LinkComponentRoute<TFullPath>;
 }
 export declare function createRoute<TRegister = unknown, TParentRoute extends RouteConstraints['TParentRoute'] = AnyRoute, TPath extends RouteConstraints['TPath'] = '/', TFullPath extends RouteConstraints['TFullPath'] = ResolveFullPath<TParentRoute, TPath>, TCustomId extends RouteConstraints['TCustomId'] = string, TId extends RouteConstraints['TId'] = ResolveId<TParentRoute, TCustomId, TPath>, TSearchValidator = undefined, TParams = ResolveParams<TPath>, TRouteContextFn = AnyContext, TBeforeLoadFn = AnyContext, TLoaderDeps extends Record<string, any> = {}, TLoaderFn = undefined, TChildren = unknown, TSSR = unknown, THandlers = undefined>(options: RouteOptions<TRegister, TParentRoute, TId, TCustomId, TFullPath, TPath, TSearchValidator, TParams, TLoaderDeps, TLoaderFn, AnyContext, TRouteContextFn, TBeforeLoadFn, TSSR, THandlers>): Route<TRegister, TParentRoute, TPath, TFullPath, TCustomId, TId, TSearchValidator, TParams, AnyContext, TRouteContextFn, TBeforeLoadFn, TLoaderDeps, TLoaderFn, TChildren, unknown, TSSR, unknown, THandlers>;
 export type AnyRootRoute = RootRoute<any, any, any, any, any, any, any, any, any, any>;
@@ -60,7 +74,7 @@ export declare class RootRoute<in out TRegister = Register, in out TSearchValida
     useLoaderDeps: UseLoaderDepsRoute<RootRouteId>;
     useLoaderData: UseLoaderDataRoute<RootRouteId>;
     useNavigate: () => UseNavigateResult<"/">;
-    Link: any;
+    Link: LinkComponentRoute<'/'>;
 }
 export declare function getRouteApi<const TId, TRouter extends AnyRouter = RegisteredRouter>(id: ConstrainLiteral<TId, RouteIds<TRouter['routeTree']>>): RouteApi<TId, TRouter>;
 export declare class RouteApi<TId, TRouter extends AnyRouter = RegisteredRouter> extends BaseRouteApi<TId, TRouter> {
@@ -75,7 +89,7 @@ export declare class RouteApi<TId, TRouter extends AnyRouter = RegisteredRouter>
     useLoaderDeps: UseLoaderDepsRoute<TId>;
     useLoaderData: UseLoaderDataRoute<TId>;
     useNavigate: () => UseNavigateResult<RouteTypesById<TRouter, TId>["fullPath"]>;
-    Link: any;
+    Link: LinkComponentRoute<RouteTypesById<TRouter, TId>['fullPath']>;
     notFound: (opts?: NotFoundError) => NotFoundError;
 }
 export declare function createRootRouteWithContext<TRouterContext extends {}>(): <TRegister = Register, TRouteContextFn = AnyContext, TBeforeLoadFn = AnyContext, TSearchValidator = undefined, TLoaderDeps extends Record<string, any> = {}, TLoaderFn = undefined, TSSR = unknown, THandlers = undefined>(options?: RootRouteOptions<TRegister, TSearchValidator, TRouterContext, TRouteContextFn, TBeforeLoadFn, TLoaderDeps, TLoaderFn, TSSR, THandlers>) => RootRoute<TRegister, TSearchValidator, TRouterContext, TRouteContextFn, TBeforeLoadFn, TLoaderDeps, TLoaderFn, unknown, unknown, TSSR, THandlers>;

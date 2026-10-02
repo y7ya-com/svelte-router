@@ -3,7 +3,7 @@
   generics="TRouter extends AnyRouter = RegisteredRouter, TFrom extends string = string, TTo extends string | undefined = undefined, TMaskFrom extends string = TFrom, TMaskTo extends string = ''"
 >
   import { onMount } from 'svelte'
-  import { useRouter } from './useRouter'
+  import { useRouter } from './useRouter.js'
   import type {
     AnyRouter,
     NavigateOptions,

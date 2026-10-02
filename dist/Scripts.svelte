@@ -1,102 +1,103 @@
 <script lang="ts">
-  import { useRouter } from './useRouter'
+  import {
+    composeSsrBodyScripts,
+    getSsrBodyScriptParts,
+  } from '@tanstack/router-core'
+  import { isServer } from '@tanstack/router-core/isServer'
   import { useSelector } from '@tanstack/svelte-store'
-    import type { RouterManagedTag } from '@tanstack/router-core'
+  import { useRouter } from './useRouter.js'
+  import { keyTags } from './headContentUtils.js'
+  import { isExecutableScript } from './utils.js'
+  import ClientScript from './ClientScript.svelte'
+  import type { AnyRouter, RouterManagedTag } from '@tanstack/router-core'
 
-  const router = useRouter()
+  // During streaming SSR, `<Scripts>` marks where late hydration scripts may
+  // begin to be inserted: its last tag is the transport boundary.
+  const router = useRouter<AnyRouter>()
   const nonce = router.options.ssr?.nonce
-  const matchesSel = useSelector(router.stores.matches, (s) => s)
 
-  const allScripts = $derived.by(() => {
-    const matches = matchesSel.current
-
-    const scripts: Array<RouterManagedTag> = []
-    for (const match of matches) {
-      const matchScripts = (match as any).scripts as
-        | Array<any>
-        | undefined
-      if (!matchScripts) continue
-      for (const script of matchScripts) {
-        if (!script) continue
-        const { children, ...rest } = script
-        scripts.push({
-          tag: 'script',
-          attrs: { ...rest, nonce },
-          children,
-        } as any)
-      }
-    }
-
-    const assetScripts: Array<RouterManagedTag> = []
-    const manifest = (router as any).ssr?.manifest
-    if (manifest) {
-      for (const match of matches) {
-        const route = router.looseRoutesById[match.routeId]
-        if (!route) continue
-        const entry = manifest.routes[route.id]
-        if (!entry) continue
-        // Manifest shape differs across start-plugin-core versions: older
-        // cores emit `assets: [{tag, attrs, children}]`, newer ones emit
-        // `scripts: [{attrs}]` (plus preloads/css). Accept both.
-        const fromAssets = (entry.assets ?? [])
-          .filter((a: any) => a.tag === 'script')
-          .map((a: any) => ({ attrs: a.attrs, children: a.children }))
-        const fromScripts = (entry.scripts ?? []).map((sc: any) => ({
-          attrs: sc.attrs ?? sc,
-          children: sc.children,
-        }))
-        for (const asset of [...fromAssets, ...fromScripts]) {
-          assetScripts.push({
-            tag: 'script',
-            attrs: { ...asset.attrs, nonce },
-            children: asset.children,
-          } as any)
-        }
-      }
-    }
-
-    let serverBufferedScript: RouterManagedTag | undefined
-    if ((router as any).serverSsr) {
-      serverBufferedScript = (router as any).serverSsr.takeBufferedScripts()
-    }
-
-    // Dedupe: with file-based route trees, several matches can carry the
-    // same manifest script (e.g. the dev client entry on every route).
-    const seen = new Set<string>()
-    const all = [...scripts, ...assetScripts].filter((t) => {
-      const key = JSON.stringify([(t as any).attrs?.src ?? null, (t as any).children ?? null])
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
-    if (serverBufferedScript) all.unshift(serverBufferedScript)
-    return all
-  })
-
-  function escapeAttr(v: unknown): string {
-    return String(v ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/"/g, '&quot;')
+  function escapeAttr(value: unknown) {
+    return String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
   }
 
-  const scriptsHtml = $derived(
-    allScripts
-      .map((s) => {
-        const attrs = Object.entries((s as any).attrs ?? {})
+  // Tags are serialized whole rather than rendered through `<Asset>`: Svelte
+  // places hydration markers inside block content, and the stream transform
+  // matches the boundary script's closing bytes exactly. A literal script
+  // element cannot appear in a Svelte template, hence the interpolated name.
+  function toHtml(tags: Array<RouterManagedTag>) {
+    return tags
+      .map((tag) => {
+        const attrs = Object.entries(tag.attrs ?? {})
           .filter(([, v]) => v !== undefined && v !== null && v !== false)
-          .map(([k, v]) =>
-            v === true ? ` ${k}` : ` ${k}="${escapeAttr(v)}"`,
-          )
+          .map(([k, v]) => (v === true ? ` ${k}` : ` ${k}="${escapeAttr(v)}"`))
           .join('')
-        const children = (s as any).children ?? ''
-        return `<${'script'}${attrs}>${children}</${'script'}>`
+        return `<${'script'}${attrs}>${tag.children ?? ''}</${'script'}>`
       })
-      .join(''),
+      .join('')
+  }
+
+  function getTags(matches: Array<any>) {
+    return composeSsrBodyScripts(
+      getSsrBodyScriptParts(matches, router.ssr?.manifest, nonce),
+    )
+  }
+
+  // The server renders once and reads the stores directly; reactivity is only
+  // set up in the browser. Its initial hydration scripts (the transport
+  // bootstrap, then the stream boundary last) surround the route and manifest
+  // scripts, the same order as `composeSsrBodyScripts`. They exist only in the
+  // server render: the client takes the empty branch of their `{#if}` blocks.
+  const initialHydrationTags =
+    (isServer ?? router.isServer)
+      ? router.serverSsr?.takeInitialHydrationScriptTags()
+      : undefined
+  const bootstrapHtml = initialHydrationTags
+    ? toHtml(initialHydrationTags.before)
+    : ''
+  const boundaryHtml = initialHydrationTags
+    ? toHtml([initialHydrationTags.boundary])
+    : ''
+
+  // Tags rendered by the server (on the client: hydrated, already executed)
+  // are claimed as they are. Tags added by later navigations are inserted by
+  // `ClientScript`, since scripts injected as HTML never run.
+  const ssrTags =
+    (isServer ?? router.isServer) || router.ssr
+      ? keyTags(getTags(router.stores.matches.get()))
+      : []
+  const ssrHtml = toHtml(ssrTags.map((entry) => entry.tag))
+  const ssrTagKeys = new Set(ssrTags.map((entry) => entry.key))
+
+  const matchesSel =
+    (isServer ?? router.isServer)
+      ? undefined
+      : useSelector(router.stores.matches)
+  const clientTags = $derived(
+    matchesSel
+      ? keyTags(getTags(matchesSel.current)).filter(
+          (entry) => !ssrTagKeys.has(entry.key),
+        )
+      : [],
   )
 </script>
 
-<!-- The router's own dehydration/bootstrap scripts, serialized above. These
-must reach the document as executable script elements, so escaping is not an
-option. The content is router-generated, never user input. -->
+<!-- Router-generated script tags; they must reach the document as executable
+elements, so they are not escaped. -->
+{#if bootstrapHtml}
+  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+  {@html bootstrapHtml}
+{/if}
 <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-{@html scriptsHtml}
+{@html ssrHtml}
+{#if boundaryHtml}
+  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+  {@html boundaryHtml}
+{/if}
+{#each clientTags as { key, tag } (key)}
+  {#if isExecutableScript(tag.attrs)}
+    <ClientScript attrs={tag.attrs} children={tag.children} />
+  {:else}
+    <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+    {@html toHtml([tag])}
+  {/if}
+{/each}

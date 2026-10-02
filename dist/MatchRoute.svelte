@@ -1,22 +1,32 @@
-<script lang="ts">
-  import type { Snippet } from 'svelte'
-  import { useRouter } from './useRouter'
-  import { useSelector } from '@tanstack/svelte-store'
+<script
+  lang="ts"
+  generics="TRouter extends AnyRouter = RegisteredRouter, TFrom extends string = string, TTo extends string | undefined = undefined, TMaskFrom extends string = TFrom, TMaskTo extends string = ''"
+>
+  import type { AnyRouter, RegisteredRouter } from '@tanstack/router-core'
+  import { useRouter } from './useRouter.js'
+  import { useRouterSelector } from './utils.js'
+  import type { MakeMatchRouteOptions } from './useMatches.svelte.js'
 
-  type Props = Record<string, unknown> & {
-    children?: Snippet<[]>
-    match?: Snippet<[any]>
-  }
-
-  let { children, match, ...opts }: Props = $props()
+  let {
+    children,
+    match,
+    ...opts
+  }: MakeMatchRouteOptions<TRouter, TFrom, TTo, TMaskFrom, TMaskTo> = $props()
 
   const router = useRouter()
-  // Subscribe to matchRouteDeps so re-renders propagate when the route changes.
-  const deps = useSelector(router.stores.matchRouteDeps, (s) => s)
+  // Re-evaluate whenever navigation state changes.
+  const locationSel = useRouterSelector(router, router.stores.location)
+  const resolvedLocationSel = useRouterSelector(
+    router,
+    router.stores.resolvedLocation,
+  )
+  const statusSel = useRouterSelector(router, router.stores.status)
   const currentMatch = $derived.by(() => {
-    // Read deps so this re-runs when navigation updates the route tree.
-    void deps.current
-    const { pending, caseSensitive, fuzzy, includeSearch, ...rest } = opts as any
+    void locationSel.current
+    void resolvedLocationSel.current
+    void statusSel.current
+    const { pending, caseSensitive, fuzzy, includeSearch, ...rest } =
+      opts as any
     return router.matchRoute(rest, {
       pending,
       caseSensitive,

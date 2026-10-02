@@ -10,7 +10,11 @@
 
   let { promise, fallback, children }: Props = $props()
 
-  let state = $state<{ status: 'pending' } | { status: 'done'; data: T } | { status: 'error'; error: unknown }>({
+  let state = $state<
+    | { status: 'pending' }
+    | { status: 'done'; data: T }
+    | { status: 'error'; error: unknown }
+  >({
     status: 'pending',
   })
 
@@ -19,10 +23,14 @@
     let cancelled = false
     Promise.resolve(p)
       .then((data) => {
-        if (!cancelled) state = { status: 'done', data: data as T }
+        if (!cancelled) {
+          state = { status: 'done', data: data as T }
+        }
       })
       .catch((error) => {
-        if (!cancelled) state = { status: 'error', error }
+        if (!cancelled) {
+          state = { status: 'error', error }
+        }
       })
     return () => {
       cancelled = true
@@ -33,7 +41,9 @@
 {#if state.status === 'pending'}
   {#if fallback}{@render fallback()}{/if}
 {:else if state.status === 'error'}
-  {(() => { throw state.error })()}
+  {(() => {
+    throw state.error
+  })()}
 {:else}
   {@render children(state.data)}
 {/if}

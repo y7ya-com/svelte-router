@@ -1,4 +1,8 @@
 import HeadContent from './HeadContent.svelte';
-declare const HeadContent: import("svelte").Component<Record<string, never>, {}, "">;
+import type { AssetCrossOriginConfig } from '@tanstack/router-core';
+type $$ComponentProps = {
+    assetCrossOrigin?: AssetCrossOriginConfig;
+};
+declare const HeadContent: import("svelte").Component<$$ComponentProps, {}, "">;
 type HeadContent = ReturnType<typeof HeadContent>;
 export default HeadContent;

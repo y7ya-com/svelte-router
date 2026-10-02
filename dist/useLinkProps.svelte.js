@@ -1,6 +1,6 @@
 import { deepEqual } from '@tanstack/router-core';
-import { useSelector } from '@tanstack/svelte-store';
-import { useRouter } from './useRouter';
+import { useRouterSelector } from './utils.js';
+import { useRouter } from './useRouter.js';
 const OWN_KEYS = new Set([
     'to',
     'from',
@@ -26,6 +26,7 @@ const OWN_KEYS = new Set([
     'viewTransition',
     'state',
     'unsafeRelative',
+    'href',
     'children',
     '_asChild',
 ]);
@@ -39,17 +40,19 @@ const OWN_KEYS = new Set([
  */
 export function useLinkProps(getOptions) {
     const router = useRouter();
-    const locationSel = useSelector(router.stores.location);
+    const locationSel = useRouterSelector(router, router.stores.location);
     const opts = $derived(getOptions());
     const rest = $derived.by(() => {
         const r = {};
         for (const [k, v] of Object.entries(opts)) {
-            if (!OWN_KEYS.has(k))
+            if (!OWN_KEYS.has(k)) {
                 r[k] = v;
+            }
         }
         return r;
     });
     const buildOpts = $derived({
+        href: opts.href,
         to: opts.to,
         from: opts.from,
         params: opts.params,
@@ -62,10 +65,19 @@ export function useLinkProps(getOptions) {
         state: opts.state,
         ignoreBlocker: opts.ignoreBlocker,
     });
+    // Everything `navigate` needs beyond what `buildLocation` takes.
+    const navigateOpts = $derived({
+        ...buildOpts,
+        reloadDocument: opts.reloadDocument,
+        hashScrollIntoView: opts.hashScrollIntoView,
+        startTransition: opts.startTransition,
+        viewTransition: opts.viewTransition,
+    });
     const isExternal = $derived(typeof opts.to === 'string' && /^(https?:)?\/\//.test(opts.to));
     const href = $derived.by(() => {
-        if (isExternal)
+        if (isExternal) {
             return opts.to;
+        }
         // Read the location selector so this derived re-runs when navigation
         // changes the current URL/params.
         void locationSel.current;
@@ -73,31 +85,66 @@ export function useLinkProps(getOptions) {
             const next = router.buildLocation(buildOpts);
             const location = next.maskedLocation ?? next;
             const publicHref = location.publicHref ?? location.href;
-            if (location.external)
+            if (location.external) {
                 return publicHref;
+            }
             return router.history.createHref(publicHref) || '/';
         }
         catch {
             return '';
         }
     });
-    const effectivePreload = $derived(opts.preload ?? router.options.defaultPreload);
+    const effectivePreload = $derived.by(() => {
+        if (opts.reloadDocument || opts.disabled || isExternal) {
+            return false;
+        }
+        return opts.preload ?? router.options.defaultPreload;
+    });
+    const preloadDelay = $derived(opts.preloadDelay ?? router.options.defaultPreloadDelay ?? 0);
     function preload() {
-        if (opts.disabled || isExternal)
+        if (opts.disabled || isExternal) {
             return;
+        }
         router.preloadRoute(buildOpts).catch(() => { });
+    }
+    // `preloadDelay` debounces intent/viewport preloads: the timer is armed on
+    // enter and cleared on leave, so a cursor sweeping across links preloads
+    // only the one it settles on.
+    let preloadTimeout;
+    function schedulePreload() {
+        if (!preloadDelay) {
+            preload();
+            return;
+        }
+        if (preloadTimeout !== undefined) {
+            return;
+        }
+        preloadTimeout = setTimeout(() => {
+            preloadTimeout = undefined;
+            preload();
+        }, preloadDelay);
+    }
+    function cancelPreload() {
+        if (preloadTimeout === undefined) {
+            return;
+        }
+        clearTimeout(preloadTimeout);
+        preloadTimeout = undefined;
     }
     function handleClick(e) {
         if (opts.disabled) {
             e.preventDefault();
             return;
         }
-        if (isExternal)
+        if (isExternal) {
             return;
+        }
         // Use the actual DOM element's target if the prop wasn't set — this lets
         // a custom `_asChild` component override `target` (e.g. set `_blank`).
+        // Read the attribute: on an SVG `<a>` the `target` property is an
+        // `SVGAnimatedString`, not a string.
         const effectiveTarget = opts.target ??
-            (e.currentTarget?.target || undefined);
+            (e.currentTarget?.getAttribute('target') || undefined);
         if (e.defaultPrevented ||
             e.button !== 0 ||
             e.metaKey ||
@@ -108,18 +155,33 @@ export function useLinkProps(getOptions) {
             return;
         }
         e.preventDefault();
-        router.navigate(buildOpts);
+        router.navigate(navigateOpts);
     }
     function handleIntent() {
-        if (effectivePreload !== 'intent')
+        if (effectivePreload !== 'intent') {
             return;
+        }
+        schedulePreload();
+    }
+    function handleLeave() {
+        if (effectivePreload !== 'intent') {
+            return;
+        }
+        cancelPreload();
+    }
+    function handleTouchStart() {
+        if (effectivePreload !== 'intent') {
+            return;
+        }
         preload();
     }
     const isActive = $derived.by(() => {
-        if (!opts.to)
+        if (!opts.to) {
             return false;
-        if (isExternal)
+        }
+        if (isExternal) {
             return false;
+        }
         try {
             const nextLocation = router.buildLocation(buildOpts);
             const current = locationSel.current;
@@ -128,30 +190,32 @@ export function useLinkProps(getOptions) {
             const basepath = router.basepath ?? '/';
             const removeTrailing = (p) => {
                 const base = basepath === '/' ? '' : basepath;
-                if (p === '/' || p === base)
+                if (p === '/' || p === base) {
                     return base || '/';
+                }
                 return p.endsWith('/') ? p.slice(0, -1) : p;
             };
             if (opts.activeOptions?.exact) {
                 const cp = removeTrailing(currentPath);
                 const np = removeTrailing(nextPath);
-                if (cp !== np)
+                if (cp !== np) {
                     return false;
+                }
             }
             else {
                 const cp = removeTrailing(currentPath);
                 const np = removeTrailing(nextPath);
-                const fuzzy = cp.startsWith(np) && (cp.length === np.length || cp[np.length] === '/');
-                if (!fuzzy)
+                const fuzzy = cp.startsWith(np) &&
+                    (cp.length === np.length || cp[np.length] === '/');
+                if (!fuzzy) {
                     return false;
+                }
             }
             if (opts.activeOptions?.includeSearch ?? true) {
-                const searchTest = deepEqual(current.search ?? {}, nextLocation.search ?? {}, {
-                    partial: !opts.activeOptions?.exact,
-                    ignoreUndefined: !opts.activeOptions?.explicitUndefined,
-                });
-                if (!searchTest)
+                const searchTest = deepEqual(current.search ?? {}, nextLocation.search ?? {}, !opts.activeOptions?.exact, opts.activeOptions?.explicitUndefined);
+                if (!searchTest) {
                     return false;
+                }
             }
             if (opts.activeOptions?.includeHash) {
                 return (current.hash ?? '') === (nextLocation.hash ?? '');
@@ -174,34 +238,41 @@ export function useLinkProps(getOptions) {
     const mergedClass = $derived.by(() => {
         const parts = [];
         const restCls = rest.class;
-        if (restCls)
+        if (restCls) {
             parts.push(restCls);
-        if (isActive && resolvedActiveProps.class)
+        }
+        if (isActive && resolvedActiveProps.class) {
             parts.push(resolvedActiveProps.class);
-        if (!isActive && resolvedInactiveProps.class)
+        }
+        if (!isActive && resolvedInactiveProps.class) {
             parts.push(resolvedInactiveProps.class);
+        }
         return parts.length > 0 ? parts.join(' ') : undefined;
     });
     const mergedStyle = $derived.by(() => {
         const parts = [];
         const restStyle = rest.style;
         if (restStyle) {
-            if (typeof restStyle === 'string')
+            if (typeof restStyle === 'string') {
                 parts.push(restStyle);
+            }
             else if (typeof restStyle === 'object') {
-                for (const [k, v] of Object.entries(restStyle))
+                for (const [k, v] of Object.entries(restStyle)) {
                     parts.push(`${k}: ${v}`);
+                }
             }
         }
         const stateStyle = isActive
             ? resolvedActiveProps.style
             : resolvedInactiveProps.style;
         if (stateStyle) {
-            if (typeof stateStyle === 'string')
+            if (typeof stateStyle === 'string') {
                 parts.push(stateStyle);
+            }
             else if (typeof stateStyle === 'object') {
-                for (const [k, v] of Object.entries(stateStyle))
+                for (const [k, v] of Object.entries(stateStyle)) {
                     parts.push(`${k}: ${v}`);
+                }
             }
         }
         return parts.length > 0 ? parts.join('; ') : undefined;
@@ -213,8 +284,9 @@ export function useLinkProps(getOptions) {
         // Merge non-class/style keys from active/inactive
         const stateProps = isActive ? resolvedActiveProps : resolvedInactiveProps;
         for (const k of Object.keys(stateProps)) {
-            if (k === 'class' || k === 'style')
+            if (k === 'class' || k === 'style') {
                 continue;
+            }
             r[k] = stateProps[k];
         }
         return r;
@@ -228,22 +300,27 @@ export function useLinkProps(getOptions) {
     // (they read `remainingRest` at call time), so handlers aren't re-attached on
     // every active/inactive change.
     const composeHandler = (key, own) => (e) => {
-        if (e.defaultPrevented)
+        if (e.defaultPrevented) {
             return;
+        }
         const user = remainingRest[key];
         if (typeof user === 'function') {
             user(e);
-            if (e.defaultPrevented)
+            if (e.defaultPrevented) {
                 return;
+            }
         }
         own(e);
     };
     const composedHandlers = {
         onclick: composeHandler('onclick', handleClick),
         onfocus: composeHandler('onfocus', handleIntent),
+        onblur: composeHandler('onblur', handleLeave),
         onmouseenter: composeHandler('onmouseenter', handleIntent),
         onmouseover: composeHandler('onmouseover', handleIntent),
-        ontouchstart: composeHandler('ontouchstart', handleIntent),
+        onmouseleave: composeHandler('onmouseleave', handleLeave),
+        onmouseout: composeHandler('onmouseout', handleLeave),
+        ontouchstart: composeHandler('ontouchstart', handleTouchStart),
     };
     return {
         get href() {
@@ -269,6 +346,8 @@ export function useLinkProps(getOptions) {
         },
         handlers: composedHandlers,
         preload,
+        schedulePreload,
+        cancelPreload,
         /** The complete spreadable prop bag: `<a {...link.attrs}>`. */
         get attrs() {
             const disabled = opts.disabled;

@@ -1,5 +1,5 @@
 import { getContext } from 'svelte';
-import { routerContextKey } from './routerContext';
+import { routerContextKey } from './routerContext.js';
 export function useRouter(opts) {
     const value = getContext(routerContextKey);
     if (process.env.NODE_ENV !== 'production') {

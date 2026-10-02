@@ -1,66 +1,48 @@
 <script lang="ts">
   import { setContext } from 'svelte'
-  import { isNotFound } from '@tanstack/router-core'
-  import type { AnyRoute, AnyRouteMatch } from '@tanstack/router-core'
-  import { useSelector } from '@tanstack/svelte-store'
-  import { useRouter } from './useRouter'
+  import { isNotFound, rootRouteId } from '@tanstack/router-core'
+  import { isServer } from '@tanstack/router-core/isServer'
+  import type {
+    AnyRoute,
+    AnyRouteMatch,
+    AnyRouter,
+  } from '@tanstack/router-core'
+  import { isSnippet, toError, useRouterSelector } from './utils.js'
+  import { useRouter } from './useRouter.js'
   import {
     nearestMatchContextKey,
     type NearestMatchContextValue,
-  } from './matchContext'
-  import { isSnippet } from './utils'
+  } from './matchContext.js'
   import Outlet from './Outlet.svelte'
   import ErrorComponent from './ErrorComponent.svelte'
   import ErrorBubbler from './ErrorBubbler.svelte'
+  import RouteNotFound from './RouteNotFound.svelte'
+  import ClientOnly from './ClientOnly.svelte'
+  import ScrollRestoration from './ScrollRestoration.svelte'
   import type { Component, Snippet } from 'svelte'
 
-  let { matchId }: { matchId: string } = $props()
+  let { routeId }: { routeId: string } = $props()
 
-  const router = useRouter()
+  const router = useRouter<AnyRouter>()
 
-  // matchStores is a Map (non-reactive), but each entry is a reactive atom.
-  // matchId is a prop and can change — we subscribe imperatively to handle source changes.
-  //
-  // The read MUST be a `$derived`, not a `$state` written from an `$effect`:
-  // `$effect` runs *after* the render pass, so an effect-written `match` stays
-  // on the outgoing match for one full render while `matchId` already points at
-  // the incoming one. During that render the outgoing route's component is still
-  // mounted even though its match has already been dropped from `matchesId`, so
-  // its `useMatch`/`useRouteContext({ from })` selectors resolve to `undefined`
-  // and unguarded reads throw. Deriving keeps the component swap in the same
-  // pass as the `matchId` change. It also works on the server, where `$effect`
-  // never runs.
-  //
-  // `matchVersion` is only a reactivity trigger: the atom's value is invisible
-  // to Svelte, so the subscription bumps a counter that the derived reads.
-  let matchVersion = $state(0)
-  $effect(() => {
-    const store = router.stores.matchStores.get(matchId)
-    if (!store) return
-    return store.subscribe(() => {
-      matchVersion++
-    }).unsubscribe
-  })
-  const match = $derived.by(() => {
-    matchVersion
-    return router.stores.matchStores.get(matchId)?.get() as
-      | AnyRouteMatch
-      | undefined
-  })
-
-  const pendingRouteIdsSel = useSelector(router.stores.pendingRouteIds)
-
-  const routeId = $derived(match?.routeId as string | undefined)
-  const route = $derived(
-    routeId ? (router.routesById[routeId] as AnyRoute | undefined) : undefined,
+  // One stable store per route id: it stays in router-core's pool while the
+  // route is out of the tree and holds `undefined` until it re-enters. The
+  // read is a `$derived` (not `$state` written from an `$effect`) so the
+  // component swap happens in the same pass as the id change — an effect
+  // runs a full render late, during which the outgoing component's selectors
+  // would already resolve to `undefined`. It also works on the server, where
+  // `$effect` never runs.
+  // svelte-ignore state_referenced_locally
+  const matchSel = useRouterSelector(
+    router,
+    router.stores.getMatchStore(routeId),
   )
+  const match = $derived(matchSel.current as AnyRouteMatch | undefined)
+  const route = $derived(router.routesById[routeId] as AnyRoute | undefined)
 
   const nearestMatch: NearestMatchContextValue = {
-    matchId: () => matchId,
     routeId: () => routeId,
     match: () => match,
-    hasPending: () =>
-      routeId ? Boolean(pendingRouteIdsSel.current[routeId]) : false,
   }
   setContext(nearestMatchContextKey, nearestMatch)
 
@@ -73,11 +55,70 @@
   const errorComponent = $derived(
     route?.options.errorComponent ?? router.options.defaultErrorComponent,
   )
+  // The root route falls back to `notFoundRoute`'s component before the
+  // router-wide default, like the other ports.
   const notFoundComponent = $derived(
-    route?.options.notFoundComponent ?? router.options.defaultNotFoundComponent,
+    route?.options.notFoundComponent ??
+      (route?.isRoot
+        ? router.options.notFoundRoute?.options.component
+        : undefined) ??
+      router.options.defaultNotFoundComponent,
   )
 
   const status = $derived(match?.status)
+
+  // Root-only document shell (see RootRouteOptionsExtensions in route.ts).
+  const ShellComponent = $derived(
+    route?.isRoot
+      ? ((
+          route.options as { shellComponent?: Component<{ children: Snippet }> }
+        ).shellComponent ?? undefined)
+      : undefined,
+  )
+
+  // Selective SSR: `ssr: false` / `'data-only'` routes render only their
+  // pending view on the server and mount their component once hydrated.
+  const resolvedNoSsr = $derived(
+    match?.ssr === false || match?.ssr === 'data-only',
+  )
+
+  // `remountDeps` re-keys the component so it remounts when the chosen deps
+  // (loaderDeps/params/search) change instead of updating in place.
+  const componentKey = $derived.by(() => {
+    const remount =
+      route?.options.remountDeps ?? router.options.defaultRemountDeps
+    if (!remount || !match) {
+      return routeId
+    }
+    const deps = remount({
+      routeId,
+      loaderDeps: match.loaderDeps,
+      params: match._strictParams,
+      search: match._strictSearch,
+    })
+    return JSON.stringify(deps) ?? routeId
+  })
+
+  // Errors caught by this route's boundary: not-founds are forwarded to the
+  // not-found handling in `failed`; everything else is reported through
+  // `onCatch` / `defaultOnCatch`, like the other ports.
+  function onBoundaryError(error: unknown) {
+    if (isNotFound(error)) {
+      return
+    }
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn(`Warning: Error in route match: ${routeId}`)
+    }
+    ;(route?.options.onCatch ?? router.options.defaultOnCatch)?.(toError(error))
+  }
+
+  // On the server, direct children of the root emit the scroll-restoration
+  // bootstrap when the router opts in (mirrors solid-router's Match).
+  const renderScrollRestoration = $derived(
+    (isServer ?? router.isServer) &&
+      route?.parentRoute?.id === rootRouteId &&
+      !!router.options.scrollRestoration,
+  )
 
   // Decide whether this Match should render `notFoundComponent` or bubble the
   // not-found error up to a parent Match's boundary. The `errSrc` arg is the
@@ -92,7 +133,11 @@
     const routeIdTarget = nfErr?.routeId
     const hasOwnNotFound =
       !!r?.options.notFoundComponent ||
-      !!(r?.isRoot && rtr.options.defaultNotFoundComponent)
+      !!(
+        r?.isRoot &&
+        (rtr.options.notFoundRoute?.options.component ||
+          rtr.options.defaultNotFoundComponent)
+      )
     if (routeIdTarget) {
       // Explicit routeId: only the matching route renders its notFoundComponent.
       return r?.id === routeIdTarget && hasOwnNotFound
@@ -102,42 +147,19 @@
   }
 </script>
 
-{#if !match}
-  <!-- no match -->
-{:else if status === 'pending' && pendingComponent}
-  {#if isSnippet(pendingComponent)}
-    {@render (pendingComponent as Snippet<[]>)()}
-  {:else}
-    {@const C = pendingComponent as Component<Record<string, never>>}
-    <C />
-  {/if}
-{:else if status === 'notFound' || (match && (match as any).globalNotFound === true && notFoundComponent)}
-  {#if shouldHandleNotFoundHere(match, route, router)}
-    {#if isSnippet(notFoundComponent)}
-      {@render (notFoundComponent as Snippet<[]>)()}
-    {:else if notFoundComponent}
-      {@const NF = notFoundComponent as Component<any>}
-      <NF data={(match.error as any)?.data} />
+{#snippet pending()}
+  {#if pendingComponent}
+    {#if isSnippet(pendingComponent)}
+      {@render (pendingComponent as Snippet<[]>)()}
+    {:else}
+      {@const C = pendingComponent as Component<Record<string, never>>}
+      <C />
     {/if}
-  {:else}
-    <ErrorBubbler error={match.error} />
   {/if}
-{:else if status === 'error'}
-  {#if route?.options.errorComponent || router.options.defaultErrorComponent}
-    {@const RouteErrorComponent = (errorComponent ?? ErrorComponent) as Component<any>}
-    <!-- Direct (non-boundary) error render: no boundary reset is available
-         here, so `reset` is undefined. -->
-    <RouteErrorComponent
-      error={match.error}
-      reset={undefined as any}
-      info={{ componentStack: '' }}
-    />
-  {:else}
-    <ErrorBubbler error={match.error} />
-  {/if}
-{:else}
-  {@const RouteErrorComponent = (errorComponent ?? ErrorComponent) as Component<any>}
-  <svelte:boundary>
+{/snippet}
+
+{#snippet content()}
+  {#key componentKey}
     {#if component}
       {#if isSnippet(component)}
         {@render (component as Snippet<[]>)()}
@@ -148,33 +170,82 @@
     {:else}
       <Outlet />
     {/if}
-    {#snippet failed(error, reset)}
-      {#if isNotFound(error)}
-        {#if shouldHandleNotFoundHere(match, route, router, error)}
-          {#if isSnippet(notFoundComponent)}
-            {@render (notFoundComponent as Snippet<[]>)()}
-          {:else if notFoundComponent}
-            {@const NF = notFoundComponent as Component<any>}
-            <NF data={(error as any)?.data} />
+  {/key}
+{/snippet}
+
+{#snippet inner()}
+  {#if !match}
+    <!-- no match -->
+  {:else if status === 'pending'}
+    {@render pending()}
+  {:else if status === 'notFound'}
+    <!-- router-core already picked this route as the not-found boundary. -->
+    {#if route}
+      <RouteNotFound {route} error={match.error} />
+    {/if}
+  {:else if status === 'error'}
+    {#if route?.options.errorComponent || router.options.defaultErrorComponent}
+      {@const RouteErrorComponent = (errorComponent ??
+        ErrorComponent) as Component<any>}
+      <!-- Direct (non-boundary) error render: no boundary reset is available
+           here, so `reset` is undefined. -->
+      <RouteErrorComponent
+        error={toError(match.error)}
+        reset={undefined as any}
+        info={{ componentStack: '' }}
+      />
+    {:else}
+      <ErrorBubbler error={match.error} />
+    {/if}
+  {:else}
+    {@const RouteErrorComponent = (errorComponent ??
+      ErrorComponent) as Component<any>}
+    <svelte:boundary onerror={onBoundaryError}>
+      {#if resolvedNoSsr}
+        <ClientOnly>
+          {#snippet fallback()}{@render pending()}{/snippet}
+          {@render content()}
+        </ClientOnly>
+      {:else}
+        {@render content()}
+      {/if}
+      {#snippet failed(error, reset)}
+        {#if isNotFound(error)}
+          {#if shouldHandleNotFoundHere(match, route, router, error)}
+            {#if isSnippet(notFoundComponent)}
+              {@render (notFoundComponent as Snippet<[]>)()}
+            {:else if notFoundComponent}
+              {@const NF = notFoundComponent as Component<any>}
+              <NF data={(error as any)?.data} />
+            {/if}
+          {:else}
+            <ErrorBubbler {error} />
+          {/if}
+        {:else if route?.options.errorComponent || router.options.defaultErrorComponent}
+          {#if isSnippet(errorComponent)}
+            {@render (errorComponent as Snippet<[]>)()}
+          {:else}
+            <!-- Boundary-caught error: `reset` re-renders the boundary
+                 contents, so the error component's `props.reset()` retries. -->
+            <RouteErrorComponent
+              error={toError(error)}
+              reset={reset as () => void}
+              info={{ componentStack: '' }}
+            />
           {/if}
         {:else}
-          <ErrorBubbler error={error} />
+          <ErrorBubbler {error} />
         {/if}
-      {:else if route?.options.errorComponent || router.options.defaultErrorComponent}
-        {#if isSnippet(errorComponent)}
-          {@render (errorComponent as Snippet<[]>)()}
-        {:else}
-          <!-- Boundary-caught error: `reset` re-renders the boundary
-               contents, so the error component's `props.reset()` retries. -->
-          <RouteErrorComponent
-            error={error as Error}
-            reset={reset as () => void}
-            info={{ componentStack: '' }}
-          />
-        {/if}
-      {:else}
-        <ErrorBubbler error={error} />
-      {/if}
-    {/snippet}
-  </svelte:boundary>
+      {/snippet}
+    </svelte:boundary>
+  {/if}
+{/snippet}
+
+{#if ShellComponent}
+  <ShellComponent>{@render inner()}</ShellComponent>
+{:else}
+  {@render inner()}
+{/if}
+{#if renderScrollRestoration}
+  <ScrollRestoration />
 {/if}

@@ -15,12 +15,15 @@
     childProps: Record<string, unknown>
   } = $props()
 
+  // svelte-ignore state_referenced_locally
   const initial = getComp()
   let Comp = $state<Component<any> | undefined>(initial)
 
   // If not already resolved, kick off the import and update state once done.
   $effect(() => {
-    if (Comp) return
+    if (Comp) {
+      return
+    }
     load().then(() => {
       Comp = getComp()
     })

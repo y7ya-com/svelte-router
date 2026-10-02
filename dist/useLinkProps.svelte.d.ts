@@ -1,3 +1,4 @@
+import type { ViewTransitionOptions } from '@tanstack/router-core';
 export type LinkStateProps = {
     class?: string;
     style?: Record<string, unknown> | string;
@@ -29,6 +30,11 @@ export type UseLinkPropsOptions = {
     ignoreBlocker?: boolean;
     state?: unknown;
     unsafeRelative?: unknown;
+    /** Declared by router-core; no framework port acts on it yet. */
+    preloadIntentProximity?: number;
+    hashScrollIntoView?: boolean | ScrollIntoViewOptions;
+    startTransition?: boolean;
+    viewTransition?: boolean | ViewTransitionOptions;
     /** Everything else — user attributes and handlers, merged into `rest`. */
     [key: string]: unknown;
 };
@@ -51,11 +57,16 @@ export declare function useLinkProps(getOptions: () => UseLinkPropsOptions): {
     handlers: {
         onclick: (e: Event) => void;
         onfocus: (e: Event) => void;
+        onblur: (e: Event) => void;
         onmouseenter: (e: Event) => void;
         onmouseover: (e: Event) => void;
+        onmouseleave: (e: Event) => void;
+        onmouseout: (e: Event) => void;
         ontouchstart: (e: Event) => void;
     };
     preload: () => void;
+    schedulePreload: () => void;
+    cancelPreload: () => void;
     /** The complete spreadable prop bag: `<a {...link.attrs}>`. */
     readonly attrs: Record<string, unknown>;
 };

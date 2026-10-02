@@ -1,12 +1,12 @@
-import { createRoute } from './route';
-import { useMatch } from './useMatch.svelte';
-import { useLoaderDeps } from './useLoaderDeps';
-import { useLoaderData } from './useLoaderData';
-import { useSearch } from './useSearch';
-import { useParams } from './useParams';
-import { useNavigate } from './useNavigate';
-import { useRouter } from './useRouter';
-import { useRouteContext } from './useRouteContext';
+import { createRoute } from './route.js';
+import { useMatch } from './useMatch.svelte.js';
+import { useLoaderDeps } from './useLoaderDeps.js';
+import { useLoaderData } from './useLoaderData.js';
+import { useSearch } from './useSearch.js';
+import { useParams } from './useParams.js';
+import { useNavigate } from './useNavigate.js';
+import { useRouter } from './useRouter.js';
+import { useRouteContext } from './useRouteContext.js';
 export function createFileRoute(path) {
     return new FileRoute(path, {
         silent: true,
@@ -43,10 +43,10 @@ export function FileRouteLoader(_path) {
 }
 export class LazyRoute {
     constructor(opts) {
-        this.useMatch = (opts) => useMatch({ select: opts?.select, from: this.options.id });
+        this.useMatch = (opts) => useMatch({ ...opts, from: this.options.id });
         this.useRouteContext = (opts) => useRouteContext({ ...opts, from: this.options.id });
-        this.useSearch = (opts) => useSearch({ select: opts?.select, from: this.options.id });
-        this.useParams = (opts) => useParams({ select: opts?.select, from: this.options.id });
+        this.useSearch = (opts) => useSearch({ ...opts, from: this.options.id });
+        this.useParams = (opts) => useParams({ ...opts, from: this.options.id });
         this.useLoaderDeps = (opts) => useLoaderDeps({ ...opts, from: this.options.id });
         this.useLoaderData = (opts) => useLoaderData({ ...opts, from: this.options.id });
         this.useNavigate = () => {

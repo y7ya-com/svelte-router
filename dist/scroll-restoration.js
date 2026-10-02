@@ -1,7 +1,7 @@
-/**
- * v1 stub for useElementScrollRestoration. Returns undefined and a no-op setter.
- * TODO(svelte-port): full implementation pairing with router-core's setupScrollRestoration.
- */
-export function useElementScrollRestoration(_opts) {
-    return { current: undefined };
+import { getElementScrollRestorationEntry, setupScrollRestoration, } from '@tanstack/router-core';
+import { useRouter } from './useRouter.js';
+export function useElementScrollRestoration(options) {
+    const router = useRouter();
+    setupScrollRestoration(router, true);
+    return getElementScrollRestorationEntry(router, options);
 }

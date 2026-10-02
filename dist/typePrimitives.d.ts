@@ -1,12 +1,8 @@
-import type { UseParamsOptions } from './useParams';
-import type { UseSearchOptions } from './useSearch';
-import type { AnyRouter, Constrain, InferFrom, InferMaskFrom, InferMaskTo, InferSelected, InferShouldThrow, InferStrict, InferTo, LinkOptions, RegisteredRouter } from '@tanstack/router-core';
-/**
- * Constrains a link options object against the route tree. The constraint is
- * router-core's LinkOptions (there is no component-level LinkComponentProps
- * here); `TComp` is unused but kept so the signature stays stable.
- */
-export type ValidateLinkOptions<TRouter extends AnyRouter = RegisteredRouter, TOptions = unknown, TDefaultFrom extends string = string, TComp = 'a'> = Constrain<TOptions, LinkOptions<TRouter, InferFrom<TOptions, TDefaultFrom>, InferTo<TOptions>, InferMaskFrom<TOptions>, InferMaskTo<TOptions>>>;
+import type { LinkComponentProps } from './link.js';
+import type { UseParamsOptions } from './useParams.js';
+import type { UseSearchOptions } from './useSearch.js';
+import type { AnyRouter, Constrain, InferFrom, InferMaskFrom, InferMaskTo, InferSelected, InferShouldThrow, InferStrict, InferTo, RegisteredRouter } from '@tanstack/router-core';
+export type ValidateLinkOptions<TRouter extends AnyRouter = RegisteredRouter, TOptions = unknown, TDefaultFrom extends string = string, TComp = 'a'> = Constrain<TOptions, LinkComponentProps<TComp, TRouter, InferFrom<TOptions, TDefaultFrom>, InferTo<TOptions>, InferMaskFrom<TOptions>, InferMaskTo<TOptions>>>;
 export type ValidateLinkOptionsArray<TRouter extends AnyRouter = RegisteredRouter, TOptions extends ReadonlyArray<any> = ReadonlyArray<unknown>, TDefaultFrom extends string = string, TComp = 'a'> = {
     [K in keyof TOptions]: ValidateLinkOptions<TRouter, TOptions[K], TDefaultFrom, TComp>;
 };

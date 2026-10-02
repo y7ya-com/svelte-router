@@ -4,6 +4,7 @@
   import RouterContextProvider from './RouterContextProvider.svelte'
   import Matches from './Matches.svelte'
   import ErrorComponent from './ErrorComponent.svelte'
+  import { toError } from './utils.js'
 
   type Props = {
     router: TRouter
@@ -21,12 +22,8 @@
   {:else}
     <svelte:boundary>
       <Matches />
-      {#snippet failed(error, reset)}
-        <ErrorComponent
-          error={error as Error}
-          reset={reset as () => void}
-          info={{ componentStack: '' }}
-        />
+      {#snippet failed(error)}
+        <ErrorComponent error={toError(error)} />
       {/snippet}
     </svelte:boundary>
   {/if}

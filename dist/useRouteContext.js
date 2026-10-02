@@ -1,4 +1,4 @@
-import { useMatch } from './useMatch.svelte';
+import { useMatch } from './useMatch.svelte.js';
 export function useRouteContext(opts) {
     const o = (opts ?? {});
     return useMatch({

@@ -19,12 +19,12 @@
 {:else if props.tag === 'title'}
   <title>{props.children}</title>
 {:else if props.tag === 'style'}
-  <svelte:element this={'style'} {...props.attrs}>
+  <svelte:element this={"style"} {...props.attrs}>
     <!-- eslint-disable-next-line svelte/no-at-html-tags -->
     {#if props.children}{@html props.children}{/if}
   </svelte:element>
 {:else if props.tag === 'script'}
-  <svelte:element this={'script'} {...props.attrs}>
+  <svelte:element this={"script"} {...props.attrs}>
     <!-- eslint-disable-next-line svelte/no-at-html-tags -->
     {#if props.children}{@html props.children}{/if}
   </svelte:element>

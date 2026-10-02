@@ -4,85 +4,69 @@
    therefore reports these assertions as redundant, but removing them breaks
    `pnpm test:types`. Keep them; do not let `eslint --fix` strip them. */
 import { getContext } from 'svelte';
-import { useSelector } from '@tanstack/svelte-store';
 import { invariant } from '@tanstack/router-core';
-import { useRouter } from './useRouter';
-import { defaultNearestMatchContext, nearestMatchContextKey, } from './matchContext';
+import { useRouterSelector } from './utils.js';
+import { useRouter } from './useRouter.js';
+import { defaultNearestMatchContext, nearestMatchContextKey, } from './matchContext.js';
 export function useMatch(opts) {
     const safeOpts = (opts ?? {});
     const router = useRouter();
     const nearestMatch = safeOpts.from
         ? undefined
         : (getContext(nearestMatchContextKey) ?? defaultNearestMatchContext);
-    if (safeOpts.from) {
-        const store = router.stores.getRouteMatchStore(safeOpts.from);
-        // Phase 1 — synchronous check at hook-call time is the ONLY throw site
-        // The reactive selector below must never throw,
-        // otherwise a transiently-undefined match during a navigation / view
-        // transition would crash instead of resolving to the next match.
-        const initial = store.get();
-        if (initial === undefined &&
-            !router.stores.pendingRouteIds.get()[safeOpts.from] &&
-            !router.stores.isTransitioning.get() &&
-            (safeOpts.shouldThrow ?? true)) {
-            if (process.env.NODE_ENV !== 'production') {
-                throw new Error(`Invariant failed: Could not find an active match from "${safeOpts.from}"`);
-            }
-            invariant();
-        }
-        // Phase 2 — reactive selector. Never throws; keeps the previous value while
-        // the route is pending or the router is transitioning, else `undefined`.
-        let prev = initial !== undefined
-            ? (safeOpts.select ? safeOpts.select(initial) : initial)
-            : undefined;
-        const sel = useSelector(store, (m) => {
-            if (m === undefined) {
-                const hasPendingMatch = !!router.stores.pendingRouteIds.get()[safeOpts.from];
-                if (prev !== undefined &&
-                    (hasPendingMatch || router.stores.isTransitioning.get())) {
-                    return prev;
-                }
-                return undefined;
-            }
-            prev = (safeOpts.select ? safeOpts.select(m) : m);
-            return prev;
-        });
-        return sel;
-    }
-    // From-context case: read via nearestMatch.match() which is reactive.
-    // Compute initial value synchronously so consumers reading `.current` on
-    // first render see the right shape (avoids `.current.x` crashes before
-    // the effect first fires).
-    const initialMatch = nearestMatch.match();
-    // Phase 1 — synchronous throw check (the only throw site; see the `from`
-    // branch above for why the reactive effect must not throw).
-    if (initialMatch === undefined &&
-        !nearestMatch.hasPending() &&
-        !router.stores.isTransitioning.get() &&
-        (safeOpts.shouldThrow ?? true)) {
-        if (process.env.NODE_ENV !== 'production') {
-            throw new Error('Invariant failed: Could not find a nearest match!');
-        }
-        invariant();
-    }
-    let value = $state(initialMatch !== undefined
-        ? safeOpts.select
-            ? safeOpts.select(initialMatch)
-            : initialMatch
-        : undefined);
-    // Phase 2 — reactive effect. Never throws; keeps the previous value while the
-    // nearest match is pending or the router is transitioning, else `undefined`.
-    $effect(() => {
-        const m = nearestMatch.match();
-        if (m === undefined) {
-            if (value !== undefined &&
-                (nearestMatch.hasPending() || router.stores.isTransitioning.get())) {
-                return;
-            }
-            value = undefined;
+    const select = (m) => (safeOpts.select ? safeOpts.select(m) : m);
+    // The only throw site is this synchronous check at hook-call time. The
+    // reactive reads below never throw: a match can be transiently `undefined`
+    // while a navigation is in flight, and that must resolve, not crash.
+    const throwIfMissing = (m) => {
+        if (m !== undefined || !(safeOpts.shouldThrow ?? true)) {
             return;
         }
-        value = safeOpts.select ? safeOpts.select(m) : m;
+        if (router.stores.status.get() === 'pending') {
+            return;
+        }
+        if (process.env.NODE_ENV !== 'production') {
+            throw new Error(`Invariant failed: Could not find ${safeOpts.from ? `an active match from "${safeOpts.from}"` : 'a nearest match!'}`);
+        }
+        invariant();
+    };
+    if (safeOpts.from) {
+        const store = router.stores.getMatchStore(safeOpts.from);
+        throwIfMissing(store.get());
+        // While a navigation is pending the route may be briefly absent from the
+        // pool; keep the last value until it either re-enters or the router
+        // settles without it (the status is read too, since the store does not
+        // emit again when the router settles).
+        const matchSel = useRouterSelector(router, store);
+        const statusSel = useRouterSelector(router, router.stores.status);
+        let prev;
+        const value = $derived.by(() => {
+            const m = matchSel.current;
+            if (m === undefined) {
+                return statusSel.current === 'pending' ? prev : undefined;
+            }
+            prev = select(m);
+            return prev;
+        });
+        return {
+            get current() {
+                return value;
+            },
+        };
+    }
+    // Nearest match from context. The initial value is computed synchronously
+    // so a consumer reading `.current` during its first render sees it.
+    const initialMatch = nearestMatch.match();
+    throwIfMissing(initialMatch);
+    let value = $state(initialMatch !== undefined ? select(initialMatch) : undefined);
+    $effect(() => {
+        const m = nearestMatch.match();
+        // An outgoing component re-runs its effects during the flush that unmounts
+        // it, after its match has left the pool; it keeps the value it had.
+        if (m === undefined) {
+            return;
+        }
+        value = select(m);
     });
     return {
         get current() {

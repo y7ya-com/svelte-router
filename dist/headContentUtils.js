@@ -1,6 +1,6 @@
-import { useSelector } from '@tanstack/svelte-store';
 import { appendUniqueUserTags, escapeHtml, getAssetCrossOrigin, getScriptPreloadAttrs, resolveManifestCssLink, } from '@tanstack/router-core';
-import { useRouter } from './useRouter';
+import { useRouterSelector } from './utils.js';
+import { useRouter } from './useRouter.js';
 /**
  * Build the list of head/link/meta/script tags to render for active matches.
  * Used internally by `HeadContent`.
@@ -13,7 +13,7 @@ import { useRouter } from './useRouter';
 export function useTags(assetCrossOrigin) {
     const router = useRouter();
     const nonce = router.options.ssr?.nonce;
-    return useSelector(router.stores.matches, (matches) => {
+    return useRouterSelector(router, router.stores.matches, (matches) => {
         const routeMetasArray = matches
             .map((match) => match.meta)
             .filter(Boolean);
@@ -24,11 +24,13 @@ export function useTags(assetCrossOrigin) {
             const metas = routeMetasArray[i];
             for (let j = metas.length - 1; j >= 0; j--) {
                 const m = metas[j];
-                if (!m)
+                if (!m) {
                     continue;
+                }
                 if (m.title) {
-                    if (!title)
+                    if (!title) {
                         title = { tag: 'title', children: m.title };
+                    }
                 }
                 else if ('script:ld+json' in m) {
                     try {
@@ -46,16 +48,18 @@ export function useTags(assetCrossOrigin) {
                 else {
                     const attribute = m.name ?? m.property;
                     if (attribute) {
-                        if (metaByAttribute[attribute])
+                        if (metaByAttribute[attribute]) {
                             continue;
+                        }
                         metaByAttribute[attribute] = true;
                     }
                     meta.push({ tag: 'meta', attrs: { ...m, nonce } });
                 }
             }
         }
-        if (title)
+        if (title) {
             meta.push(title);
+        }
         if (router.options.ssr?.nonce) {
             meta.push({
                 tag: 'meta',
@@ -109,18 +113,20 @@ export function useTags(assetCrossOrigin) {
                 });
             });
         }
-        const styles = (matches
+        const styles = matches
             .map((match) => match.styles)
             .flat(1)
-            .filter(Boolean)).map(({ children, ...style }) => ({
+            .filter(Boolean)
+            .map(({ children, ...style }) => ({
             tag: 'style',
             attrs: { ...style, nonce },
             children,
         }));
-        const headScripts = (matches
+        const headScripts = matches
             .map((match) => match.headScripts)
             .flat(1)
-            .filter(Boolean)).map(({ children, ...script }) => ({
+            .filter(Boolean)
+            .map(({ children, ...script }) => ({
             tag: 'script',
             attrs: { ...script, nonce },
             children,
@@ -133,5 +139,18 @@ export function useTags(assetCrossOrigin) {
         appendUniqueUserTags(next, styles);
         appendUniqueUserTags(next, headScripts);
         return next;
+    });
+}
+/**
+ * Key tags by content so unchanged tags keep their DOM nodes across
+ * navigations; identical tags get an occurrence suffix to stay unique.
+ */
+export function keyTags(tags) {
+    const seen = new Map();
+    return tags.map((tag) => {
+        const json = JSON.stringify(tag);
+        const count = seen.get(json) ?? 0;
+        seen.set(json, count + 1);
+        return { key: `${json}#${count}`, tag };
     });
 }

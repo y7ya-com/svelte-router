@@ -1,7 +1,7 @@
 import { RouterCore } from '@tanstack/router-core';
 import type { RouterHistory } from '@tanstack/history';
 import type { AnyRoute, CreateRouterFn, RouterConstructorOptions, TrailingSlashOption } from '@tanstack/router-core';
-import type { ErrorRouteComponent, NotFoundRouteComponent, RouteComponent } from './route';
+import type { ErrorRouteComponent, NotFoundRouteComponent, RouteComponent } from './route.js';
 import type { Component, Snippet } from 'svelte';
 declare module '@tanstack/router-core' {
     interface RouterOptionsExtensions {

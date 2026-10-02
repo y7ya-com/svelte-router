@@ -1,9 +1,55 @@
 <script lang="ts">
   import { getContext } from 'svelte'
-  import { useTags } from './headContentUtils'
-  import { headSlotContextKey } from './routerContext'
+  import { isServer } from '@tanstack/router-core/isServer'
+  import { keyTags, useTags } from './headContentUtils.js'
+  import { headSlotContextKey } from './routerContext.js'
+  import { useRouter } from './useRouter.js'
+  import { isExecutableScript } from './utils.js'
+  import ClientScript from './ClientScript.svelte'
+  import type {
+    AssetCrossOriginConfig,
+    RouterManagedTag,
+  } from '@tanstack/router-core'
 
-  const tagsSel = useTags()
+  let { assetCrossOrigin }: { assetCrossOrigin?: AssetCrossOriginConfig } =
+    $props()
+
+  const router = useRouter()
+  // svelte-ignore state_referenced_locally
+  const tagsSel = useTags(assetCrossOrigin)
+
+  // Stylesheets rendered by the server stay in the head after their route
+  // becomes inactive: the bundler skips injecting a stylesheet that is already
+  // linked, so removing it would unstyle a later route sharing that chunk.
+  const preservedStylesheets =
+    !(isServer ?? router.isServer) && router.ssr
+      ? keyTags(
+          tagsSel.current.filter(
+            (tag) => tag.tag === 'link' && tag.attrs?.rel === 'stylesheet',
+          ),
+        )
+      : []
+
+  const tags = $derived.by(() => {
+    const keyed = keyTags(tagsSel.current)
+    for (const preserved of preservedStylesheets) {
+      if (!keyed.some((entry) => entry.key === preserved.key)) {
+        keyed.push(preserved)
+      }
+    }
+    return keyed
+  })
+
+  // Tags present when hydrating were rendered (and their scripts run) by the
+  // server; later executable scripts are inserted by `ClientScript`.
+  // svelte-ignore state_referenced_locally
+  const ssrTagKeys = new Set(
+    !(isServer ?? router.isServer) && router.ssr ? tags.map((t) => t.key) : [],
+  )
+  const renderInline = (key: string, tag: RouterManagedTag) =>
+    (isServer ?? router.isServer) ||
+    ssrTagKeys.has(key) ||
+    !isExecutableScript(tag.attrs)
 
   // Render at most once per tree. The scaffolds (RouterServer/RouterClient)
   // seed a head slot, and `RouterProvider` seeds one when they haven't (pure
@@ -27,7 +73,9 @@
   function attrStr(attrs: Record<string, any> = {}): string {
     let out = ''
     for (const [key, value] of Object.entries(attrs)) {
-      if (value == null || value === false) continue
+      if (value == null || value === false) {
+        continue
+      }
       if (value === true) {
         out += ` ${key}`
         continue
@@ -37,7 +85,10 @@
     return out
   }
 
-  function styleTagHtml(tag: { attrs?: Record<string, any>; children?: string }) {
+  function styleTagHtml(tag: {
+    attrs?: Record<string, any>
+    children?: string
+  }) {
     return `<style${attrStr(tag.attrs)}>${tag.children ?? ''}<\/style>`
   }
 
@@ -58,7 +109,7 @@
     `{@html}`: `<svelte:head>` can't host `<svelte:element>`, so the tag has to
     be built as a string. Contents come from route `head` options and the build
     manifest — author-controlled, never user input. -->
-    {#each tagsSel.current as tag, i (i)}
+    {#each tags as { key, tag } (key)}
       {#if tag.tag === 'title'}
         <title>{tag.children}</title>
       {:else if tag.tag === 'meta'}
@@ -69,8 +120,12 @@
         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
         {@html styleTagHtml(tag)}
       {:else if tag.tag === 'script'}
-        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-        {@html scriptTagHtml(tag)}
+        {#if renderInline(key, tag)}
+          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+          {@html scriptTagHtml(tag)}
+        {:else}
+          <ClientScript attrs={tag.attrs} children={tag.children} />
+        {/if}
       {/if}
     {/each}
   {/if}

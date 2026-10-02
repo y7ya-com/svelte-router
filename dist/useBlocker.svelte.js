@@ -1,4 +1,4 @@
-import { useRouter } from './useRouter';
+import { useRouter } from './useRouter.js';
 const IDLE = {
     status: 'idle',
     current: undefined,
@@ -14,8 +14,9 @@ function _resolveBlockerOpts(opts, condition) {
     if (typeof opts === 'function') {
         const shouldBlock = Boolean(condition ?? true);
         const _customBlockerFn = async () => {
-            if (shouldBlock)
+            if (shouldBlock) {
                 return await opts();
+            }
             return false;
         };
         return {
@@ -24,8 +25,9 @@ function _resolveBlockerOpts(opts, condition) {
             withResolver: false,
         };
     }
-    if ('shouldBlockFn' in opts)
+    if ('shouldBlockFn' in opts) {
         return opts;
+    }
     const shouldBlock = Boolean(opts.condition ?? true);
     const _customBlockerFn = async () => {
         if (shouldBlock && opts.blockerFn !== undefined) {
@@ -52,21 +54,21 @@ export function useBlocker(opts, condition) {
         const blockerFnComposed = async (blockerFnArgs) => {
             function getLocation(location) {
                 const parsedLocation = router.parseLocation(location);
-                const matchedRoutes = router.getMatchedRoutes(parsedLocation.pathname);
-                if (matchedRoutes.foundRoute === undefined) {
+                const [, rawParams, foundRoute] = router.getMatchedRoutes(parsedLocation.pathname);
+                if (foundRoute === undefined) {
                     return {
                         routeId: '__notFound__',
                         fullPath: parsedLocation.pathname,
                         pathname: parsedLocation.pathname,
-                        params: matchedRoutes.routeParams,
+                        params: rawParams,
                         search: parsedLocation.search,
                     };
                 }
                 return {
-                    routeId: matchedRoutes.foundRoute.id,
-                    fullPath: matchedRoutes.foundRoute.fullPath,
+                    routeId: foundRoute.id,
+                    fullPath: foundRoute.fullPath,
                     pathname: parsedLocation.pathname,
-                    params: matchedRoutes.routeParams,
+                    params: rawParams,
                     search: parsedLocation.search,
                 };
             }
@@ -81,10 +83,12 @@ export function useBlocker(opts, condition) {
                 current,
                 next,
             });
-            if (!withResolver)
+            if (!withResolver) {
                 return shouldBlock;
-            if (!shouldBlock)
+            }
+            if (!shouldBlock) {
                 return false;
+            }
             const promise = new Promise((resolve) => {
                 resolver = {
                     status: 'blocked',
@@ -99,15 +103,17 @@ export function useBlocker(opts, condition) {
             resolver = IDLE;
             return canNavigateAsync;
         };
-        if (disabled)
+        if (disabled) {
             return;
+        }
         return router.history.block({
             blockerFn: blockerFnComposed,
             enableBeforeUnload,
         });
     });
-    if (!withResolver)
+    if (!withResolver) {
         return;
+    }
     return {
         get current() {
             return resolver;

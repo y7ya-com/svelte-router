@@ -6,7 +6,7 @@
     RegisteredRouter,
     RouterOptions,
   } from '@tanstack/router-core'
-  import { headSlotContextKey, routerContextKey } from './routerContext'
+  import { headSlotContextKey, routerContextKey } from './routerContext.js'
 
   type Props = {
     router: TRouter
@@ -19,6 +19,7 @@
   let { router, Wrap, children, ...rest }: Props = $props()
 
   // Allow the render site to update options on the router instance.
+  // svelte-ignore state_referenced_locally
   router.update({
     ...router.options,
     ...(rest as Partial<RouterOptions<any, any, any, any, any>>),
@@ -28,6 +29,7 @@
     },
   })
 
+  // svelte-ignore state_referenced_locally
   setContext(routerContextKey, router)
 
   // Head slot: lets `HeadContent` render at most once per tree. The SSR
@@ -43,8 +45,10 @@
   // `router.options.Wrap` is how integrations (e.g. ssr-query) inject a
   // provider around the whole route tree. The `Wrap` prop is composed
   // outside it.
-  const OptionsWrap = (router.options as { Wrap?: Component<{ children: Snippet }> })
-    .Wrap
+  // svelte-ignore state_referenced_locally
+  const OptionsWrap = (
+    router.options as { Wrap?: Component<{ children: Snippet }> }
+  ).Wrap
 </script>
 
 {#snippet wrapped()}

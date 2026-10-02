@@ -3,8 +3,8 @@ export interface UseMatchBaseOptions<TRouter extends AnyRouter, TFrom, TStrict e
     select?: (match: MakeRouteMatch<TRouter['routeTree'], TFrom, TStrict>) => TSelected;
     shouldThrow?: TThrow;
 }
-export type UseMatchRoute<out TFrom> = <TRouter extends AnyRouter = RegisteredRouter, TSelected = unknown>(opts?: UseMatchBaseOptions<TRouter, TFrom, true, true, TSelected>) => {
-    readonly current: UseMatchResult<TRouter, TFrom, true, TSelected>;
+export type UseMatchRoute<out TFrom> = <TRouter extends AnyRouter = RegisteredRouter, TSelected = unknown, TThrow extends boolean = true>(opts?: UseMatchBaseOptions<TRouter, TFrom, true, TThrow, TSelected>) => {
+    readonly current: ThrowOrOptional<UseMatchResult<TRouter, TFrom, true, TSelected>, TThrow>;
 };
 export type UseMatchOptions<TRouter extends AnyRouter, TFrom extends string | undefined, TStrict extends boolean, TThrow extends boolean, TSelected> = StrictOrFrom<TRouter, TFrom, TStrict> & UseMatchBaseOptions<TRouter, TFrom, TStrict, TThrow, TSelected>;
 export type UseMatchResult<TRouter extends AnyRouter, TFrom, TStrict extends boolean, TSelected> = unknown extends TSelected ? TStrict extends true ? MakeRouteMatch<TRouter['routeTree'], TFrom, TStrict> : MakeRouteMatchUnion<TRouter> : TSelected;
