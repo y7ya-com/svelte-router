@@ -1,6 +1,6 @@
 {
   "name": "@tanstack/svelte-router",
-  "version": "0.0.7-experimental",
+  "version": "0.0.8-experimental",
   "description": "Modern and scalable routing for Svelte applications",
   "license": "MIT",
   "repository": {
